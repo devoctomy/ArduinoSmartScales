@@ -37,15 +37,17 @@ LiquidMenu menu(lcd);
 
 void setup()
 {
+  Serial.begin(9600);
+  Serial.println("Configuring lcd");  
+
   lcd.init();
   lcd.backlight();
+  lcd.print("Please wait...");
+
+  Serial.println("Configuring menu");
   menu.init();
   menu.add_screen(welcome_screen);
-  menu.add_screen(secondary_screen);
-  
-  lcd.print("Please wait...");
-  
-  Serial.begin(9600);
+  menu.add_screen(secondary_screen);   
 
   Serial.println("Configuring buttons");
   AddManagedButton({
@@ -67,16 +69,16 @@ void setup()
   });
 
   Serial.println("Initialising");
-  scale.begin(DOUT, CLK);
-  scale.set_scale();
+  //scale.begin(DOUT, CLK);
+  //scale.set_scale();
 
   Serial.println("Resetting");
-  scale.tare();
+  //scale.tare();
 
   Serial.println("Getting baseline");
-  baseline = scale.read_average();
-  Serial.print("Baseline: ");
-  Serial.println(baseline);
+  //baseline = scale.read_average();
+  //Serial.print("Baseline: ");
+  //Serial.println(baseline);
 
   lcd.clear();
 }
