@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <LiquidMenu.h>
+#include <avr/sleep.h>
 #include "HX711.h"
 #include "ButtonManager.h"
 
@@ -17,15 +18,17 @@
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 HX711 scale;
 
-int encoderButtonPin = 2;
+int encoderButtonPin = 5;
 int encoderClockwisePin = 3;
 int encoderAntiClockwisePin = 4;
-int homeButtonPin = 5;
+int homeButtonPin = 2;
 
 float calibration_factor = 431;
 long baseline = 0;
 unsigned short analogReading = 0;
 bool menuRequiresUpdate = true;
+int lastActivityMillis = 0;
+int inactivityTimeBeforeSleep = 5000;
 
 LiquidLine welcome_line1(1, 0, "SmartScales ", SMARTSCALES_VERSION);
 LiquidLine welcome_line2(1, 1, "");
@@ -81,6 +84,7 @@ void setup()
   //Serial.println(baseline);
 
   lcd.clear();
+  lastActivityMillis = millis();
 }
 
 float GetAveragedSamples(int sampleCount)
@@ -117,6 +121,17 @@ void loop()
     menu.update();
     menuRequiresUpdate = false;
   }
+
+  int timeSinceLastActivity = (millis() - lastActivityMillis);
+  if(timeSinceLastActivity >= inactivityTimeBeforeSleep)
+  {
+    Sleep(homeButtonPin);
+    RegisterActivity();
+  }
+  else
+  {
+    Serial.println(inactivityTimeBeforeSleep - timeSinceLastActivity);
+  }
 }
 
 void ManagedButtonCallback(String key, ButtonState buttonState)
@@ -142,4 +157,51 @@ void ManagedEncoderCallback(String key, EncoderState encoderState)
     analogReading -= 1;
   }
   menuRequiresUpdate = true;
+}
+
+void RegisterActivity()
+{
+  lastActivityMillis = millis();
+}
+
+void Sleep(int pinToWake)
+{
+  lcd.clear();
+  lcd.print("Sleeping...");
+  Serial.print("Sleeping...");
+  delay(3000);
+
+  lcd.clear();
+  lcd.noBacklight();
+  Serial.println("Attaching interrupt!");
+  int prevPinMode = GetPinMode(pinToWake);
+  pinMode (pinToWake, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(pinToWake), SleepWakeInterrupt, FALLING);
+  
+  Serial.flush();
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable();
+  sleep_cpu();
+
+  pinMode (pinToWake, prevPinMode);
+  detachInterrupt(digitalPinToInterrupt(pinToWake));
+  lcd.backlight();
+}
+
+void SleepWakeInterrupt()
+{
+  sleep_disable();
+}
+
+int GetPinMode(uint8_t pin)
+{
+  if (pin >= NUM_DIGITAL_PINS) return (-1);
+
+  uint8_t bit = digitalPinToBitMask(pin);
+  uint8_t port = digitalPinToPort(pin);
+  volatile uint8_t *reg = portModeRegister(port);
+  if (*reg & bit) return (OUTPUT);
+
+  volatile uint8_t *out = portOutputRegister(port);
+  return ((*out & bit) ? INPUT_PULLUP : INPUT);
 }
