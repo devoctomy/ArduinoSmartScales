@@ -42,6 +42,7 @@ int lastRounded = -1;
 float lastUnrounded = -1;
 float lastAverageSample = 0;
 float lastDelta = 0;
+bool stopCalibrating = false;
 
 LiquidLine mainMenu_Options_Line1(0, 0, "Options");
 LiquidScreen mainMenu_Options(mainMenu_Options_Line1);
@@ -278,6 +279,10 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
 
 void Calibrate()
 {
+  int prevPinMode = GetPinMode(homeButtonPin);
+  pinMode (homeButtonPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(homeButtonPin), CalibrateStopInterrupt, FALLING);
+  
   char data[32];
   
   lcd.clear();
@@ -296,6 +301,8 @@ void Calibrate()
 
   lcd.clear();
   lcd.print("Calibrating...");
+  stopCalibrating = false;
+  float prevCalibrationFactor = calibration_factor;
   calibration_factor = 0;
   scale.set_scale(calibration_factor);
   float stepSize = 4.000;
@@ -304,6 +311,21 @@ void Calibrate()
   if(sample < 0) sample = 0;
   while(sample != calibrationWeight)
   {
+    if(stopCalibrating)
+    {
+      detachInterrupt(digitalPinToInterrupt(homeButtonPin));
+      pinMode (homeButtonPin, prevPinMode);
+      lcd.clear();
+      lcd.print("Aborting...");
+      delay(5000);
+      calibration_factor = prevCalibrationFactor;
+      scale.set_scale(calibration_factor);
+      showingMenu = false;
+      readSamples = true;
+      forceRefresh = true;
+      return;
+    }
+    
     float delta = sample - calibrationWeight;
     if(delta <= 0.2 && delta >= -0.2)
     {
@@ -420,6 +442,11 @@ void Sleep(int pinToWake)
 void SleepWakeInterrupt()
 {
   sleep_disable();
+}
+
+void CalibrateStopInterrupt()
+{
+  stopCalibrating = true;
 }
 
 int GetPinMode(uint8_t pin)
