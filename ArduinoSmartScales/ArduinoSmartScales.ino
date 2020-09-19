@@ -14,9 +14,7 @@
 #define SELECT_BUTTON 1
 #define LEFT_BUTTON 2
 #define RIGHT_BUTTON 3
-#define SMARTSCALES_VERSION "1.0"
-#define AVERAGE_SAMPLE_COUNT 2
-#define INACTIVITY_TIME_BEFORE_SLEEP 60000
+#define INACTIVITY_TIME_BEFORE_SLEEP 30 * 1000
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 HX711 scale;
@@ -27,6 +25,7 @@ int encoderAntiClockwisePin = 4;
 int homeButtonPin = 2;
 
 float calibration_factor = 429.24;
+float calibrationWeight = 200.00;
 long baseline = 0;
 unsigned short analogReading = 0;
 bool menuRequiresUpdate = true;
@@ -35,19 +34,24 @@ int startMillis = 0;
 bool showingMenu = false;
 bool forceRefresh = false;
 bool requiresCalibration = false;
+bool enableRounding = true;
 
 bool readSamples = true;           //Controls whether or not to read a sample during the main loop
 int curSampleIndex = 0;;
 int curSampleCount = 0;
+int lastRounded = -1;
+float lastUnrounded = -1;
 float lastAverageSample = 0;
 float lastDelta = 0;
-float samples[AVERAGE_SAMPLE_COUNT];
 
 LiquidLine mainMenu_Options_Line1(0, 0, "Options");
 LiquidScreen mainMenu_Options(mainMenu_Options_Line1);
 
 LiquidLine mainMenu_optionsMenu_Calibrate_Line1(0, 0, "Calibrate");
 LiquidScreen mainMenu_optionsMenu_Calibrate(mainMenu_optionsMenu_Calibrate_Line1);
+
+//LiquidLine mainMenu_optionsMenu_Rounding_Line1(0, 0, "Rounding: ", enableRounding);
+//LiquidScreen mainMenu_optionsMenu_Rounding(mainMenu_optionsMenu_Rounding_Line1);
 
 LiquidLine mainMenu_optionsMenu_Back_Line1(0, 0, "< Back");
 LiquidScreen mainMenu_optionsMenu_Back(mainMenu_optionsMenu_Back_Line1);
@@ -73,6 +77,7 @@ void setup()
 
   optionsMenu.init();
   optionsMenu.add_screen(mainMenu_optionsMenu_Calibrate);
+  //optionsMenu.add_screen(mainMenu_optionsMenu_Rounding);
   optionsMenu.add_screen(mainMenu_optionsMenu_Back);
 
   menuSystem.add_menu(mainMenu);
@@ -105,7 +110,7 @@ void setup()
   scale.tare();
 
   Serial.println("Getting baseline");
-  baseline = GetLargeBaseline(10); //scale.read_average();
+  baseline = GetLargeBaseline(3);
   Serial.print("Baseline: ");
   Serial.println(baseline);
   EEPROM.get(0, calibration_factor);
@@ -135,42 +140,13 @@ long GetLargeBaseline(int count)
 
 float GetAveragedSample()
 {
-  float sample = scale.get_units(3);
+  float sample = scale.get_units(2);
   if(sample < 0) sample = 0;
-  curSampleCount += 1;
-  float averageSample = AddSampleAndGetAverage(sample); 
-  return averageSample;
-}
-
-float AddSampleAndGetAverage(float sample)
-{
-  if(curSampleIndex < AVERAGE_SAMPLE_COUNT)
-  {
-    samples[curSampleIndex] = sample;
-    curSampleIndex += 1;
-    return sample;
-  }
-  else
-  {
-    for(int curIndex = 0; curIndex < (AVERAGE_SAMPLE_COUNT - 1); curIndex++)
-    {
-      samples[curIndex] = samples[curIndex + 1];
-    }
-    samples[AVERAGE_SAMPLE_COUNT - 1] = sample;
-  }
-
-  float curSampleAverage = 0;
-  for(int curIndex = 0; curIndex < AVERAGE_SAMPLE_COUNT; curIndex++)
-  {
-    curSampleAverage += samples[curIndex];
-  }
-  curSampleAverage = curSampleAverage / AVERAGE_SAMPLE_COUNT; 
-  return curSampleAverage;
+  return sample;
 }
 
 void loop()
 {
-  // only read when in reading mode
   if(readSamples)
   {
     float averageSample = GetAveragedSample();
@@ -202,13 +178,34 @@ void loop()
     }
     else
     {
-      if(lastDelta < -0.01 || lastDelta > 0.01 || forceRefresh)
+      bool updated = false;
+      if(enableRounding)
       {
-        lcd.clear();
-        lcd.print(lastAverageSample);
-        lcd.print("g");
+        int curRounded = (int)bsdRound(lastAverageSample);
+        if(curRounded != lastRounded || forceRefresh)
+        {
+          lcd.clear();
+          lcd.print(curRounded); 
+          lcd.print("g");
+          lastRounded = curRounded;
+          updated = true;
+        }
+      }
+      else
+      {
+        if(lastAverageSample != lastUnrounded || forceRefresh)
+        {
+          lcd.clear();
+          lcd.print(lastAverageSample); 
+          lcd.print("g");
+          lastUnrounded = lastAverageSample;
+          updated = true;
+        }        
+      }
+      if(updated)
+      {
         RegisterActivity();
-        forceRefresh = false;
+        forceRefresh = false; 
       }
     }
   }
@@ -220,6 +217,24 @@ void loop()
     Serial.println(timeSinceLastActivity);
     Sleep(homeButtonPin);
     RegisterActivity();
+  }
+}
+
+float bsdRound(float x)
+{
+  float t;
+  if (!isfinite(x)) return (x);
+  if (x >= 0.0)
+  {
+    t = floor(x);
+    if (t - x <= -0.5)t += 1.0;
+    return (t);
+  }
+  else
+  {
+    t = floor(-x);
+    if (t + x <= -0.5) t += 1.0;
+    return (-t);
   }
 }
 
@@ -250,6 +265,11 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
       {
         Calibrate();
       }
+      //else if(curScreen == &mainMenu_optionsMenu_Rounding)
+      //{
+      //  enableRounding != enableRounding;
+      //  menuRequiresUpdate = true;
+      //}
       else if(curScreen == &mainMenu_optionsMenu_Back)
       {
         menuSystem.change_menu(mainMenu);
@@ -270,9 +290,9 @@ void Calibrate()
   scale.set_scale();
   scale.tare();
   scale.set_scale(0);
-  baseline = GetLargeBaseline(10); //scale.read_average();
+  baseline = GetLargeBaseline(3);
   lcd.clear();
-  lcd.print("Place 50g");
+  lcd.print("Place 200g");
   delay(5000);
 
   lcd.clear();
@@ -283,10 +303,10 @@ void Calibrate()
   int unitCount = 3;
   float sample = scale.get_units(unitCount);
   if(sample < 0) sample = 0;
-  while(sample != 50.00)
+  while(sample != calibrationWeight)
   {
-    float delta = sample - 50.00;
-    if(delta < 0.006 && delta > -0.006)
+    float delta = sample - calibrationWeight;
+    if(delta <= 0.2 && delta >= -0.2)
     {
       break;
     }
@@ -323,7 +343,7 @@ void Calibrate()
     lcd.setCursor(0,1);
     lcd.print(data);
     
-    if(sample > 50.00)
+    if(sample > calibrationWeight)
     {
       calibration_factor += stepSize;
     }
@@ -337,23 +357,17 @@ void Calibrate()
     if(sample < 0) sample = 0;
   }
 
-  Serial.print("***Final Sample: ");
-  Serial.println(sample);
-  Serial.print("***Final Calibration Factor: ");
-  Serial.println(calibration_factor);
-
   EEPROM.put(0, calibration_factor);
 
   lcd.clear();
-  lcd.print("Complete...");
-  delay(5000);
-
-  lcd.clear();
+  lcd.print("Complete,");
+  lcd.setCursor(0,1);
   lcd.print("Clear scale...");
   delay(5000);
   
   showingMenu = false;
   readSamples = true;
+  forceRefresh = true;
 }
 
 void ManagedEncoderCallback(String key, EncoderState encoderState)
