@@ -36,7 +36,7 @@ bool enableRounding = true;                               //Enable / Disable rou
 bool readSamples = true;                                  //Enable / Disable reading of samples during main program loop
 int lastRounded = -1;                                     //Last rounded sample recorded
 float lastUnrounded = -1;                                 //Last unrounded sample recorded
-float lastAverageSample = 0;                              //Last average sample recorded, used to calculate delta
+float lastAverageSample = -1;                             //Last average sample recorded, used to calculate delta
 float lastDelta = 0;                                      //Last delta
 bool stopCalibrating = false;                             //Flag to abord calibration
 
@@ -100,7 +100,16 @@ void setup()
     (EncoderCallbackDelegate)ManagedEncoderCallback
   });
 
-  Serial.println("Initialising");
+  ScaleInitResults initResults = InitialiseScale(&loadCell, DOUT, CLK, BASELINEREADINGS);
+  baseline = initResults.Baseline;
+  calibrationFactor = initResults.CalibrationFactor;
+  if(calibrationFactor == 0)
+  {
+    requiresCalibration = true;
+    readSamples = false;  
+  }
+  
+  /*Serial.println("Initialising");
   loadCell.begin(DOUT, CLK);
   loadCell.set_scale();
   loadCell.tare();
@@ -118,7 +127,7 @@ void setup()
   }
   Serial.print("Calibration Factor: ");
   Serial.println(calibrationFactor);
-  loadCell.set_scale(calibrationFactor);
+  loadCell.set_scale(calibrationFactor);*/
 
   lcd.clear();
   lastActivityMillis = millis();
@@ -128,7 +137,10 @@ void loop()
 {
   if(readSamples)
   {
-    float averageSample = GetAveragedSample(loadCell, AVERAGESAMPLES);
+    Serial.println("Getting sample");
+    float averageSample = GetAveragedSample(&loadCell, AVERAGESAMPLES);
+    Serial.println("Got sample");
+    if(lastAverageSample == -1) lastAverageSample = averageSample;
     lastDelta = averageSample - lastAverageSample;
     lastAverageSample = averageSample;
   }
@@ -255,7 +267,7 @@ void Calibrate()
   loadCell.set_scale();
   loadCell.tare();
   loadCell.set_scale(0);
-  baseline = GetLargeBaseline(loadCell, BASELINEREADINGS);
+  baseline = GetLargeBaseline(&loadCell, BASELINEREADINGS);
   lcd.clear();
   lcd.print("Place 200g");
   delay(5000);
