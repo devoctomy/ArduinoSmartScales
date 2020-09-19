@@ -95,21 +95,21 @@ int AddManagedButton(ButtonDef buttonDef)
 void AddManagedEncoder(EncoderDef encoderDef)
 {
   ButtonDef clocklwiseButton = {
-    encoderDef.Key + ".Clockwise",
+    encoderDef.Key + ".CW",
     encoderDef.ClockwiseDigitalPin,
     false,
     NULL,
     &encoderDef
   };
   ButtonDef antiClocklwiseButton = {
-    encoderDef.Key + ".AntiClockwise",
+    encoderDef.Key + ".AC",
     encoderDef.AntiClockwiseDigitalPin,
     false,
     NULL,
     &encoderDef
   };
   ButtonDef button = {
-    encoderDef.Key + ".Button",
+    encoderDef.Key + ".B",
     encoderDef.ButtonDigitalPin,
     true,
     encoderDef.ButtonCallback

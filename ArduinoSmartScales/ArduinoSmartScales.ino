@@ -84,7 +84,7 @@ void setup()
 
   Serial.println("Configuring buttons");
   AddManagedButton({
-    "Home",
+    "H",
     homeButtonPin,
     true,
     (ButtonCallbackDelegate)ManagedButtonCallback
@@ -92,7 +92,7 @@ void setup()
 
   Serial.println("Configuring encoder");
   AddManagedEncoder({
-    "Encoder",
+    "E",
     encoderClockwisePin,
     encoderAntiClockwisePin,
     encoderButtonPin,
@@ -239,7 +239,7 @@ float bsdRound(float x)
 
 void ManagedButtonCallback(String key, ButtonState buttonState)
 {
-  if(key == "Home" && buttonState == ButtonState::ButtonDepressed)
+  if(key == "H" && buttonState == ButtonState::ButtonDepressed)
   {
       showingMenu = !showingMenu;
       readSamples = !showingMenu;
@@ -252,7 +252,7 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
         forceRefresh = true;
       }
   }
-  else if(key == "Encoder.Button" && buttonState == ButtonState::ButtonDepressed)
+  else if(key == "E.B" && buttonState == ButtonState::ButtonDepressed)
   {
       LiquidScreen* curScreen = menuSystem.get_currentScreen();
       if(curScreen == &mainMenu_Options)
