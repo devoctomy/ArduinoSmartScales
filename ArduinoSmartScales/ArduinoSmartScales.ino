@@ -4,6 +4,7 @@
 #include <avr/sleep.h>
 #include <EEPROM.h>
 #include "HX711.h"
+#include "PinHelpers.h"
 #include "ButtonManager.h"
 #include "MathsHelpers.h"
 #include "ScaleHelpers.h"
@@ -38,7 +39,7 @@ int lastRounded = -1;                                     //Last rounded sample 
 float lastUnrounded = -1;                                 //Last unrounded sample recorded
 float lastAverageSample = -1;                             //Last average sample recorded, used to calculate delta
 float lastDelta = 0;                                      //Last delta
-bool stopCalibrating = false;                             //Flag to abord calibration
+//bool stopCalibrating = false;                             //Flag to abord calibration
 
 //-------------------------------------------------------------------------------------
 //Menu setup
@@ -108,26 +109,6 @@ void setup()
     requiresCalibration = true;
     readSamples = false;  
   }
-  
-  /*Serial.println("Initialising");
-  loadCell.begin(DOUT, CLK);
-  loadCell.set_scale();
-  loadCell.tare();
-
-  Serial.println("Getting baseline");
-  baseline = GetLargeBaseline(loadCell, BASELINEREADINGS);
-  Serial.print("Baseline: ");
-  Serial.println(baseline);
-  EEPROM.get(0, calibrationFactor);
-  if(isnan(calibrationFactor))
-  {
-    calibrationFactor = 0;
-    requiresCalibration = true;
-    readSamples = false;
-  }
-  Serial.print("Calibration Factor: ");
-  Serial.println(calibrationFactor);
-  loadCell.set_scale(calibrationFactor);*/
 
   lcd.clear();
   lastActivityMillis = millis();
@@ -233,10 +214,22 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
       {
         menuSystem.change_menu(optionsMenu);
         menuSystem.change_screen(mainMenu_optionsMenu_Calibrate);
-      }
+      }     
       else if(curScreen == &mainMenu_optionsMenu_Calibrate)
       {
-        Calibrate();
+        CalibrateResults calibrateResults = CalibrateScale(
+          &lcd,
+          &loadCell,
+          calibrationFactor,
+          calibrationWeight,
+          HOME_BUTTON_PIN,
+          BASELINEREADINGS);
+
+        baseline = calibrateResults.Baseline;
+        calibrationFactor = calibrateResults.CalibrationFactor;
+        showingMenu = false;
+        readSamples = true;
+        forceRefresh = true;          
       }
       else if(curScreen == &mainMenu_optionsMenu_Rounding)
       {
@@ -248,120 +241,6 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
         menuSystem.change_menu(mainMenu);
       }
   }
-}
-
-void Calibrate()
-{
-  int prevPinMode = GetPinMode(HOME_BUTTON_PIN);
-  pinMode (HOME_BUTTON_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(HOME_BUTTON_PIN), CalibrateStopInterrupt, FALLING);
-  
-  char data[32];
-  
-  lcd.clear();
-  lcd.print("Please wait...");
-  delay(5000);
-  lcd.clear();
-  lcd.print("Clear scale...");
-  delay(5000);
-  loadCell.set_scale();
-  loadCell.tare();
-  loadCell.set_scale(0);
-  baseline = GetLargeBaseline(&loadCell, BASELINEREADINGS);
-  lcd.clear();
-  lcd.print("Place 200g");
-  delay(5000);
-
-  lcd.clear();
-  lcd.print("Calibrating...");
-  stopCalibrating = false;
-  float prevCalibrationFactor = calibrationFactor;
-  calibrationFactor = 0;
-  loadCell.set_scale(calibrationFactor);
-  float stepSize = 4.000;
-  int unitCount = 3;
-  float sample = loadCell.get_units(unitCount);
-  if(sample < 0) sample = 0;
-  while(sample != calibrationWeight)
-  {
-    if(stopCalibrating)
-    {
-      detachInterrupt(digitalPinToInterrupt(HOME_BUTTON_PIN));
-      pinMode (HOME_BUTTON_PIN, prevPinMode);
-      lcd.clear();
-      lcd.print("Aborting...");
-      delay(5000);
-      calibrationFactor = prevCalibrationFactor;
-      loadCell.set_scale(calibrationFactor);
-      showingMenu = false;
-      readSamples = true;
-      forceRefresh = true;
-      return;
-    }
-    
-    float delta = sample - calibrationWeight;
-    if(delta <= 0.2 && delta >= -0.2)
-    {
-      break;
-    }
-    else if(delta < 2 && delta > -2 && stepSize > 0.001)
-    {
-      stepSize -= 0.001;
-      unitCount = 10;
-    }
-    else if(delta < 5 && delta > -5 && stepSize > 0.01)
-    {
-       stepSize -= 0.010;
-       unitCount = 7;
-    }
-    else if(delta < 10 && delta > -10 && stepSize != 1.0)
-    {
-      stepSize = 1.000;
-      unitCount = 5;
-    }
-    else if(delta < 50 && delta > -50 && stepSize != 2.0)
-    {
-      stepSize = 2.000;
-      unitCount = 4;
-    }
-
-    Serial.print("Step size: ");
-    Serial.println(stepSize);
-     
-    memset(data, 0, sizeof(data));   
-    String sampleString = String(sample);
-    String cfString = String(calibrationFactor);
-
-    sprintf(data, "%s / %s", sampleString.c_str(), cfString.c_str());
-    Serial.println(data);
-    lcd.setCursor(0,1);
-    lcd.print(data);
-    
-    if(sample > calibrationWeight)
-    {
-      calibrationFactor += stepSize;
-    }
-    else
-    {
-      calibrationFactor -= stepSize;
-    }
-
-    loadCell.set_scale(calibrationFactor);
-    sample = loadCell.get_units(unitCount);
-    if(sample < 0) sample = 0;
-  }
-
-  EEPROM.put(0, calibrationFactor);
-
-  lcd.clear();
-  lcd.print("Complete,");
-  lcd.setCursor(0,1);
-  lcd.print("Clear scale...");
-  delay(5000);
-  
-  showingMenu = false;
-  readSamples = true;
-  forceRefresh = true;
 }
 
 void ManagedEncoderCallback(String key, EncoderState encoderState)
@@ -415,22 +294,4 @@ void Sleep(int pinToWake)
 void SleepWakeInterrupt()
 {
   sleep_disable();
-}
-
-void CalibrateStopInterrupt()
-{
-  stopCalibrating = true;
-}
-
-int GetPinMode(uint8_t pin)
-{
-  if (pin >= NUM_DIGITAL_PINS) return (-1);
-
-  uint8_t bit = digitalPinToBitMask(pin);
-  uint8_t port = digitalPinToPort(pin);
-  volatile uint8_t *reg = portModeRegister(port);
-  if (*reg & bit) return (OUTPUT);
-
-  volatile uint8_t *out = portOutputRegister(port);
-  return ((*out & bit) ? INPUT_PULLUP : INPUT);
 }
