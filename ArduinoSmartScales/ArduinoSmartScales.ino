@@ -39,7 +39,6 @@ int lastRounded = -1;                                     //Last rounded sample 
 float lastUnrounded = -1;                                 //Last unrounded sample recorded
 float lastAverageSample = -1;                             //Last average sample recorded, used to calculate delta
 float lastDelta = 0;                                      //Last delta
-//bool stopCalibrating = false;                             //Flag to abord calibration
 
 //-------------------------------------------------------------------------------------
 //Menu setup

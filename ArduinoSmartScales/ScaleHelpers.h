@@ -96,7 +96,10 @@ CalibrateResults CalibrateScale(
   scale->set_scale(0);
   results.Baseline = GetLargeBaseline(scale, baselineReadings);
   lcd->clear();
-  lcd->print("Place 200g");
+  String weight = String(calibrationWeight);
+  memset(data, 0, sizeof(data));
+  sprintf(data, "Place %sg", weight.c_str());
+  lcd->print(data);
   delay(5000);
 
   lcd->clear();
