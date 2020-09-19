@@ -69,9 +69,9 @@ void setup()
 
   lcd.init();
   lcd.backlight();
-  lcd.print("Please wait...");
+  lcd.print(F("Please wait..."));
 
-  Serial.println("Configuring menu");
+  Serial.println(F("Configuring menu"));
   mainMenu.init();
   mainMenu.add_screen(mainMenu_Options);
   optionsMenu.init();
@@ -81,17 +81,17 @@ void setup()
   menuSystem.add_menu(mainMenu);
   menuSystem.add_menu(optionsMenu);
 
-  Serial.println("Configuring buttons");
+  Serial.println(F("Configuring buttons"));
   AddManagedButton({
-    "H",
+    F("H"),
     HOME_BUTTON_PIN,
     true,
     (ButtonCallbackDelegate)ManagedButtonCallback
   });
 
-  Serial.println("Configuring encoder");
+  Serial.println(F("Configuring encoder"));
   AddManagedEncoder({
-    "E",
+    F("E"),
     ENCODER_CLOCKWISE_PIN,
     ENCODER_ANTICLOCKWISE_PIN,
     ENCODER_BUTTON_PIN,
@@ -117,9 +117,9 @@ void loop()
 {
   if(readSamples)
   {
-    Serial.println("Getting sample");
+    Serial.println(F("Getting sample"));
     float averageSample = GetAveragedSample(&loadCell, AVERAGESAMPLES);
-    Serial.println("Got sample");
+    Serial.println(F("Got sample"));
     if(lastAverageSample == -1) lastAverageSample = averageSample;
     lastDelta = averageSample - lastAverageSample;
     lastAverageSample = averageSample;
@@ -142,9 +142,9 @@ void loop()
       if(menuRequiresUpdate)
       {
         lcd.clear();
-        lcd.print("CALIBRATION");
+        lcd.print(F("CALIBRATION"));
         lcd.setCursor(0,1);
-        lcd.print("REQUIRED!");
+        lcd.print(F("REQUIRED!"));
       }
     }
     else
@@ -168,7 +168,7 @@ void loop()
         {
           lcd.clear();
           lcd.print(lastAverageSample); 
-          lcd.print("g");
+          lcd.print(F("g"));
           lastUnrounded = lastAverageSample;
           updated = true;
         }        
@@ -184,7 +184,7 @@ void loop()
   int timeSinceLastActivity = (millis() - lastActivityMillis);
   if(timeSinceLastActivity >= INACTIVITY_TIME_BEFORE_SLEEP)
   {
-    Serial.print("Time since last activity = ");
+    Serial.print(F("Time since last activity = "));
     Serial.println(timeSinceLastActivity);
     Sleep(HOME_BUTTON_PIN);
     RegisterActivity();
@@ -193,7 +193,7 @@ void loop()
 
 void ManagedButtonCallback(String key, ButtonState buttonState)
 {
-  if(key == "H" && buttonState == ButtonState::ButtonDepressed)
+  if(key == F("H") && buttonState == ButtonState::ButtonDepressed)
   {
       showingMenu = !showingMenu;
       readSamples = !showingMenu;
@@ -206,7 +206,7 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
         forceRefresh = true;
       }
   }
-  else if(key == "E.B" && buttonState == ButtonState::ButtonDepressed)
+  else if(key == F("E.B") && buttonState == ButtonState::ButtonDepressed)
   {
       LiquidScreen* curScreen = menuSystem.get_currentScreen();
       if(curScreen == &mainMenu_Options)
@@ -269,13 +269,13 @@ void RegisterActivity()
 void Sleep(int pinToWake)
 {
   lcd.clear();
-  lcd.print("Sleeping...");
-  Serial.print("Sleeping...");
+  lcd.print(F("Sleeping..."));
+  Serial.print(F("Sleeping..."));
   delay(3000);
 
   lcd.clear();
   lcd.noBacklight();
-  Serial.println("Attaching interrupt!");
+  Serial.println(F("Attaching interrupt!"));
   int prevPinMode = GetPinMode(pinToWake);
   pinMode (pinToWake, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(pinToWake), SleepWakeInterrupt, FALLING);

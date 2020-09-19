@@ -16,37 +16,37 @@ typedef void (*EncoderCallbackDelegate) (String key, EncoderState encoderState);
 struct EncoderDef
 {
   String Key;
-  int ClockwiseDigitalPin;
-  int AntiClockwiseDigitalPin;
-  int ButtonDigitalPin;
+  byte ClockwiseDigitalPin;
+  byte AntiClockwiseDigitalPin;
+  byte ButtonDigitalPin;
   bool ButtonPullUp;
   ButtonCallbackDelegate ButtonCallback;
   EncoderCallbackDelegate EncoderCallback;  
-  int ClockwiseButtonIndex;
-  int AntiClockwiseButtonIndex;
-  int ButtonIndex;
-  int LastVal;
+  byte ClockwiseButtonIndex;
+  byte AntiClockwiseButtonIndex;
+  byte ButtonIndex;
+  byte LastVal;
 };
 
 struct ButtonDef
 {
   String Key;
-  int DigitalPin;
+  byte DigitalPin;
   bool PullUp;
   ButtonCallbackDelegate ButtonCallback;
   EncoderDef *EncoderParent;
-  int LastVal;
+  byte LastVal;
 };
 
 ButtonDef managedButtonDefs[4];
 EncoderDef managedEncoderDefs[1];
-int managedButtonCount = 0;
-int managedEncoderCount = 0;
+byte managedButtonCount = 0;
+byte managedEncoderCount = 0;
 
-int CheckButton(ButtonDef *buttonDef)
+byte CheckButton(ButtonDef *buttonDef)
 {
-   int buttonVal = digitalRead(buttonDef->DigitalPin);     //Read button value  
-   int lastVal = buttonDef->LastVal;                       //Get last value
+   byte buttonVal = digitalRead(buttonDef->DigitalPin);     //Read button value  
+   byte lastVal = buttonDef->LastVal;                       //Get last value
    if(buttonVal != lastVal)                               //Compare new value against last value
    {
     buttonDef->LastVal = buttonVal;                        //Store current value as last value
@@ -64,11 +64,10 @@ void CheckEncoder(EncoderDef *encoderDef)
 {
   ButtonDef clockwiseButton = managedButtonDefs[encoderDef->ClockwiseButtonIndex];
   ButtonDef antiClockwiseButton = managedButtonDefs[encoderDef->AntiClockwiseButtonIndex];
-  int clockwise = CheckButton(&clockwiseButton);
+  byte clockwise = CheckButton(&clockwiseButton);
   if(encoderDef->LastVal == LOW && clockwise == HIGH)
   {
-    int antiClockwise = CheckButton(&antiClockwiseButton);
-
+    byte antiClockwise = CheckButton(&antiClockwiseButton);
     encoderDef->EncoderCallback(encoderDef->Key, antiClockwise == HIGH ?
       EncoderState::EncoderClockwise :
       EncoderState::EncoderAntiClockwise);
@@ -76,7 +75,7 @@ void CheckEncoder(EncoderDef *encoderDef)
   encoderDef->LastVal = clockwise;
 }
 
-int AddManagedButton(ButtonDef buttonDef)
+byte AddManagedButton(ButtonDef buttonDef)
 {
   if(buttonDef.PullUp)
   {
@@ -95,21 +94,21 @@ int AddManagedButton(ButtonDef buttonDef)
 void AddManagedEncoder(EncoderDef encoderDef)
 {
   ButtonDef clocklwiseButton = {
-    encoderDef.Key + ".CW",
+    encoderDef.Key + F(".CW"),
     encoderDef.ClockwiseDigitalPin,
     false,
     NULL,
     &encoderDef
   };
   ButtonDef antiClocklwiseButton = {
-    encoderDef.Key + ".AC",
+    encoderDef.Key + F(".AC"),
     encoderDef.AntiClockwiseDigitalPin,
     false,
     NULL,
     &encoderDef
   };
   ButtonDef button = {
-    encoderDef.Key + ".B",
+    encoderDef.Key + F(".B"),
     encoderDef.ButtonDigitalPin,
     true,
     encoderDef.ButtonCallback
@@ -125,8 +124,7 @@ void AddManagedEncoder(EncoderDef encoderDef)
 
 void CheckManagedButtons()
 {
-  int i = 0;
-  for(i = 0; i < managedButtonCount; i++)
+  for(byte i = 0; i < managedButtonCount; i++)
   {
     if(managedButtonDefs[i].EncoderParent == NULL)
     {
@@ -134,7 +132,7 @@ void CheckManagedButtons()
     }
   }
 
-  for(i = 0; i < managedEncoderCount; i++)
+  for(byte i = 0; i < managedEncoderCount; i++)
   {
     CheckEncoder(&managedEncoderDefs[i]);
   }

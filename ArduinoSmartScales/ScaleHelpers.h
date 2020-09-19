@@ -15,7 +15,7 @@ bool stopCalibrating = false;
 long GetLargeBaseline(HX711* scale, int count)
 {
   long total = 0;
-  for(int curAverage = 0; curAverage < count; curAverage++)
+  for(byte curAverage = 0; curAverage < count; curAverage++)
   {
     total = scale->read_average(); 
   }
@@ -34,12 +34,12 @@ ScaleInitResults InitialiseScale(
   scale->set_scale();
   scale->tare();
 
-  Serial.println("Getting baseline...");
+  Serial.println(F("Getting baseline..."));
   results.Baseline = GetLargeBaseline(scale, baselineReadings);
-  Serial.print("Baseline: ");
+  Serial.print(F("Baseline: "));
   Serial.println(results.Baseline);
 
-  Serial.print("Loading calibration factor...");
+  Serial.print(F("Loading calibration factor..."));
   float loadedCalibrationFactor;
   EEPROM.get(0, loadedCalibrationFactor);
   if(isnan(loadedCalibrationFactor))
@@ -50,7 +50,7 @@ ScaleInitResults InitialiseScale(
   {
     results.CalibrationFactor = loadedCalibrationFactor;
   }
-  Serial.print("Calibration Factor: ");
+  Serial.print(F("Calibration Factor: "));
   Serial.println(results.CalibrationFactor);
   
   scale->set_scale(results.CalibrationFactor);
@@ -83,13 +83,13 @@ CalibrateResults CalibrateScale(
   pinMode (homeButtonPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(homeButtonPin), CalibrateStopInterrupt, FALLING);
   
-  char data[32];
+  char data[24];
   
   lcd->clear();
-  lcd->print("Please wait...");
+  lcd->print(F("Please wait..."));
   delay(5000);
   lcd->clear();
-  lcd->print("Clear scale...");
+  lcd->print(F("Clear scale..."));
   delay(5000);
   scale->set_scale();
   scale->tare();
@@ -103,7 +103,7 @@ CalibrateResults CalibrateScale(
   delay(5000);
 
   lcd->clear();
-  lcd->print("Calibrating...");
+  lcd->print(F("Calibrating..."));
   stopCalibrating = false;
   float prevCalibrationFactor = curCalibrationFactor;
   results.CalibrationFactor = 0;
@@ -119,7 +119,7 @@ CalibrateResults CalibrateScale(
       detachInterrupt(digitalPinToInterrupt(homeButtonPin));
       pinMode (homeButtonPin, prevPinMode);
       lcd->clear();
-      lcd->print("Aborting...");
+      lcd->print(F("Aborting..."));
       delay(5000);
       results.CalibrationFactor = prevCalibrationFactor;
       scale->set_scale(results.CalibrationFactor);  
@@ -152,7 +152,7 @@ CalibrateResults CalibrateScale(
       unitCount = 4;
     }
 
-    Serial.print("Step size: ");
+    Serial.print(F("Step size: "));
     Serial.println(stepSize);
      
     memset(data, 0, sizeof(data));   
@@ -181,9 +181,9 @@ CalibrateResults CalibrateScale(
   EEPROM.put(0, results.CalibrationFactor);
 
   lcd->clear();
-  lcd->print("Complete,");
+  lcd->print(F("Complete,"));
   lcd->setCursor(0,1);
-  lcd->print("Clear scale...");
+  lcd->print(F("Clear scale..."));
   delay(5000);
 
   return results;
