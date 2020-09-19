@@ -5,45 +5,44 @@
 #include <EEPROM.h>
 #include "HX711.h"
 #include "ButtonManager.h"
+#include "MathsHelpers.h"
+#include "ScaleHelpers.h"
 
 #define DOUT A2
 #define CLK  A3
-#define AVERAGESAMPLECOUNT 7
-#define BUZZER 8
-#define MENU_BUTTON 0
-#define SELECT_BUTTON 1
-#define LEFT_BUTTON 2
-#define RIGHT_BUTTON 3
 #define INACTIVITY_TIME_BEFORE_SLEEP 30 * 1000
+#define HOME_BUTTON_PIN 2
+#define ENCODER_CLOCKWISE_PIN 3
+#define ENCODER_ANTICLOCKWISE_PIN 4
+#define ENCODER_BUTTON_PIN 5
+#define BASELINEREADINGS 3
+#define AVERAGESAMPLES 2
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
-HX711 scale;
+//-------------------------------------------------------------------------------------
+//Global variables
+//-------------------------------------------------------------------------------------
+LiquidCrystal_I2C lcd(0x27, 16, 2);                       //lcd object
+HX711 loadCell;                                           //scale object
+float calibrationFactor = 429.24;                         //Default calibration factor
+float calibrationWeight = 200.00;                         //Weight required for calibration
+long baseline = 0;                                        //Baseline value
+bool menuRequiresUpdate = true;                           //Causes menu to be refreshed
+int lastActivityMillis = 0;                               //Millisecond count that last activity was recorded
+int startMillis = 0;                                      //Millisecond count that the system started
+bool showingMenu = false;                                 //Signifies that the menu is currently being displayed
+bool forceRefresh = false;                                //Causes scale readout to be refreshed, reguardless of it changing or not
+bool requiresCalibration = false;                         //Calibration factor is not valid, calibration needs to be performed
+bool enableRounding = true;                               //Enable / Disable rounding of samples
+bool readSamples = true;                                  //Enable / Disable reading of samples during main program loop
+int lastRounded = -1;                                     //Last rounded sample recorded
+float lastUnrounded = -1;                                 //Last unrounded sample recorded
+float lastAverageSample = 0;                              //Last average sample recorded, used to calculate delta
+float lastDelta = 0;                                      //Last delta
+bool stopCalibrating = false;                             //Flag to abord calibration
 
-int encoderButtonPin = 5;
-int encoderClockwisePin = 3;
-int encoderAntiClockwisePin = 4;
-int homeButtonPin = 2;
-
-float calibration_factor = 429.24;
-float calibrationWeight = 200.00;
-long baseline = 0;
-bool menuRequiresUpdate = true;
-int lastActivityMillis = 0;
-int startMillis = 0;
-bool showingMenu = false;
-bool forceRefresh = false;
-bool requiresCalibration = false;
-bool enableRounding = true;
-
-bool readSamples = true;           //Controls whether or not to read a sample during the main loop
-int curSampleIndex = 0;;
-int curSampleCount = 0;
-int lastRounded = -1;
-float lastUnrounded = -1;
-float lastAverageSample = 0;
-float lastDelta = 0;
-bool stopCalibrating = false;
-
+//-------------------------------------------------------------------------------------
+//Menu setup
+//-------------------------------------------------------------------------------------
 LiquidLine mainMenu_Options_Line1(0, 0, "Options");
 LiquidScreen mainMenu_Options(mainMenu_Options_Line1);
 
@@ -60,6 +59,7 @@ LiquidMenu mainMenu(lcd);
 LiquidMenu optionsMenu(lcd);
 
 LiquidSystem menuSystem(0);
+//-------------------------------------------------------------------------------------
 
 void setup()
 {
@@ -74,19 +74,17 @@ void setup()
   Serial.println("Configuring menu");
   mainMenu.init();
   mainMenu.add_screen(mainMenu_Options);
-
   optionsMenu.init();
   optionsMenu.add_screen(mainMenu_optionsMenu_Calibrate);
   optionsMenu.add_screen(mainMenu_optionsMenu_Rounding);
   optionsMenu.add_screen(mainMenu_optionsMenu_Back);
-
   menuSystem.add_menu(mainMenu);
   menuSystem.add_menu(optionsMenu);
 
   Serial.println("Configuring buttons");
   AddManagedButton({
     "H",
-    homeButtonPin,
+    HOME_BUTTON_PIN,
     true,
     (ButtonCallbackDelegate)ManagedButtonCallback
   });
@@ -94,62 +92,43 @@ void setup()
   Serial.println("Configuring encoder");
   AddManagedEncoder({
     "E",
-    encoderClockwisePin,
-    encoderAntiClockwisePin,
-    encoderButtonPin,
+    ENCODER_CLOCKWISE_PIN,
+    ENCODER_ANTICLOCKWISE_PIN,
+    ENCODER_BUTTON_PIN,
     true,
     (ButtonCallbackDelegate)ManagedButtonCallback,
     (EncoderCallbackDelegate)ManagedEncoderCallback
   });
 
   Serial.println("Initialising");
-  scale.begin(DOUT, CLK);
-  scale.set_scale();
-
-  Serial.println("Resetting");
-  scale.tare();
+  loadCell.begin(DOUT, CLK);
+  loadCell.set_scale();
+  loadCell.tare();
 
   Serial.println("Getting baseline");
-  baseline = GetLargeBaseline(3);
+  baseline = GetLargeBaseline(loadCell, BASELINEREADINGS);
   Serial.print("Baseline: ");
   Serial.println(baseline);
-  EEPROM.get(0, calibration_factor);
-  if(isnan(calibration_factor))
+  EEPROM.get(0, calibrationFactor);
+  if(isnan(calibrationFactor))
   {
-    calibration_factor = 0;
+    calibrationFactor = 0;
     requiresCalibration = true;
     readSamples = false;
   }
   Serial.print("Calibration Factor: ");
-  Serial.println(calibration_factor);
-  scale.set_scale(calibration_factor);
+  Serial.println(calibrationFactor);
+  loadCell.set_scale(calibrationFactor);
 
   lcd.clear();
   lastActivityMillis = millis();
-}
-
-long GetLargeBaseline(int count)
-{
-  long total = 0;
-  for(int curAverage = 0; curAverage < count; curAverage++)
-  {
-    total = scale.read_average(); 
-  }
-  return total / count;
-}
-
-float GetAveragedSample()
-{
-  float sample = scale.get_units(2);
-  if(sample < 0) sample = 0;
-  return sample;
 }
 
 void loop()
 {
   if(readSamples)
   {
-    float averageSample = GetAveragedSample();
+    float averageSample = GetAveragedSample(loadCell, AVERAGESAMPLES);
     lastDelta = averageSample - lastAverageSample;
     lastAverageSample = averageSample;
   }
@@ -215,26 +194,8 @@ void loop()
   {
     Serial.print("Time since last activity = ");
     Serial.println(timeSinceLastActivity);
-    Sleep(homeButtonPin);
+    Sleep(HOME_BUTTON_PIN);
     RegisterActivity();
-  }
-}
-
-float bsdRound(float x)
-{
-  float t;
-  if (!isfinite(x)) return (x);
-  if (x >= 0.0)
-  {
-    t = floor(x);
-    if (t - x <= -0.5)t += 1.0;
-    return (t);
-  }
-  else
-  {
-    t = floor(-x);
-    if (t + x <= -0.5) t += 1.0;
-    return (-t);
   }
 }
 
@@ -279,9 +240,9 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
 
 void Calibrate()
 {
-  int prevPinMode = GetPinMode(homeButtonPin);
-  pinMode (homeButtonPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(homeButtonPin), CalibrateStopInterrupt, FALLING);
+  int prevPinMode = GetPinMode(HOME_BUTTON_PIN);
+  pinMode (HOME_BUTTON_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(HOME_BUTTON_PIN), CalibrateStopInterrupt, FALLING);
   
   char data[32];
   
@@ -291,10 +252,10 @@ void Calibrate()
   lcd.clear();
   lcd.print("Clear scale...");
   delay(5000);
-  scale.set_scale();
-  scale.tare();
-  scale.set_scale(0);
-  baseline = GetLargeBaseline(3);
+  loadCell.set_scale();
+  loadCell.tare();
+  loadCell.set_scale(0);
+  baseline = GetLargeBaseline(loadCell, BASELINEREADINGS);
   lcd.clear();
   lcd.print("Place 200g");
   delay(5000);
@@ -302,24 +263,24 @@ void Calibrate()
   lcd.clear();
   lcd.print("Calibrating...");
   stopCalibrating = false;
-  float prevCalibrationFactor = calibration_factor;
-  calibration_factor = 0;
-  scale.set_scale(calibration_factor);
+  float prevCalibrationFactor = calibrationFactor;
+  calibrationFactor = 0;
+  loadCell.set_scale(calibrationFactor);
   float stepSize = 4.000;
   int unitCount = 3;
-  float sample = scale.get_units(unitCount);
+  float sample = loadCell.get_units(unitCount);
   if(sample < 0) sample = 0;
   while(sample != calibrationWeight)
   {
     if(stopCalibrating)
     {
-      detachInterrupt(digitalPinToInterrupt(homeButtonPin));
-      pinMode (homeButtonPin, prevPinMode);
+      detachInterrupt(digitalPinToInterrupt(HOME_BUTTON_PIN));
+      pinMode (HOME_BUTTON_PIN, prevPinMode);
       lcd.clear();
       lcd.print("Aborting...");
       delay(5000);
-      calibration_factor = prevCalibrationFactor;
-      scale.set_scale(calibration_factor);
+      calibrationFactor = prevCalibrationFactor;
+      loadCell.set_scale(calibrationFactor);
       showingMenu = false;
       readSamples = true;
       forceRefresh = true;
@@ -357,7 +318,7 @@ void Calibrate()
      
     memset(data, 0, sizeof(data));   
     String sampleString = String(sample);
-    String cfString = String(calibration_factor);
+    String cfString = String(calibrationFactor);
 
     sprintf(data, "%s / %s", sampleString.c_str(), cfString.c_str());
     Serial.println(data);
@@ -366,19 +327,19 @@ void Calibrate()
     
     if(sample > calibrationWeight)
     {
-      calibration_factor += stepSize;
+      calibrationFactor += stepSize;
     }
     else
     {
-      calibration_factor -= stepSize;
+      calibrationFactor -= stepSize;
     }
 
-    scale.set_scale(calibration_factor);
-    sample = scale.get_units(unitCount);
+    loadCell.set_scale(calibrationFactor);
+    sample = loadCell.get_units(unitCount);
     if(sample < 0) sample = 0;
   }
 
-  EEPROM.put(0, calibration_factor);
+  EEPROM.put(0, calibrationFactor);
 
   lcd.clear();
   lcd.print("Complete,");
