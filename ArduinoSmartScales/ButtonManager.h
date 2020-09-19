@@ -38,11 +38,10 @@ struct ButtonDef
   int LastVal;
 };
 
-ButtonDef managedButtonDefs[12];
-EncoderDef managedEncoderDefs[4];
+ButtonDef managedButtonDefs[4];
+EncoderDef managedEncoderDefs[1];
 int managedButtonCount = 0;
 int managedEncoderCount = 0;
-char data[100];
 
 int CheckButton(ButtonDef *buttonDef)
 {

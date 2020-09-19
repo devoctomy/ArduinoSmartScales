@@ -27,7 +27,6 @@ int homeButtonPin = 2;
 float calibration_factor = 429.24;
 float calibrationWeight = 200.00;
 long baseline = 0;
-unsigned short analogReading = 0;
 bool menuRequiresUpdate = true;
 int lastActivityMillis = 0;
 int startMillis = 0;
@@ -50,8 +49,8 @@ LiquidScreen mainMenu_Options(mainMenu_Options_Line1);
 LiquidLine mainMenu_optionsMenu_Calibrate_Line1(0, 0, "Calibrate");
 LiquidScreen mainMenu_optionsMenu_Calibrate(mainMenu_optionsMenu_Calibrate_Line1);
 
-//LiquidLine mainMenu_optionsMenu_Rounding_Line1(0, 0, "Rounding: ", enableRounding);
-//LiquidScreen mainMenu_optionsMenu_Rounding(mainMenu_optionsMenu_Rounding_Line1);
+LiquidLine mainMenu_optionsMenu_Rounding_Line1(0, 0, "Rounding: ", enableRounding);
+LiquidScreen mainMenu_optionsMenu_Rounding(mainMenu_optionsMenu_Rounding_Line1);
 
 LiquidLine mainMenu_optionsMenu_Back_Line1(0, 0, "< Back");
 LiquidScreen mainMenu_optionsMenu_Back(mainMenu_optionsMenu_Back_Line1);
@@ -77,7 +76,7 @@ void setup()
 
   optionsMenu.init();
   optionsMenu.add_screen(mainMenu_optionsMenu_Calibrate);
-  //optionsMenu.add_screen(mainMenu_optionsMenu_Rounding);
+  optionsMenu.add_screen(mainMenu_optionsMenu_Rounding);
   optionsMenu.add_screen(mainMenu_optionsMenu_Back);
 
   menuSystem.add_menu(mainMenu);
@@ -265,11 +264,11 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
       {
         Calibrate();
       }
-      //else if(curScreen == &mainMenu_optionsMenu_Rounding)
-      //{
-      //  enableRounding != enableRounding;
-      //  menuRequiresUpdate = true;
-      //}
+      else if(curScreen == &mainMenu_optionsMenu_Rounding)
+      {
+        enableRounding = !enableRounding;
+        menuRequiresUpdate = true;
+      }
       else if(curScreen == &mainMenu_optionsMenu_Back)
       {
         menuSystem.change_menu(mainMenu);
