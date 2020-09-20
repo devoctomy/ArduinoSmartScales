@@ -8,6 +8,7 @@
 #include "ButtonManager.h"
 #include "MathsHelpers.h"
 #include "ScaleHelpers.h"
+#include "SleepHelpers.h"
 
 #define DOUT A2
 #define CLK  A3
@@ -21,6 +22,15 @@
 #define MIN_CALIBRATION_WEIGHT 10
 #define MAX_CALIBRATION_WEIGHT 200
 
+enum ScalesMode
+{
+  Normal,
+  Coffee
+};
+
+const char MENU_TEXT_MODE[] PROGMEM = "Mode";
+const char MENU_TEXT_MODE_NORMAL[] PROGMEM = "Normal";
+const char MENU_TEXT_MODE_COFFEE[] PROGMEM = "Coffee";
 const char MENU_TEXT_OPTIONS[] PROGMEM = "Options";
 const char MENU_TEXT_OPTIONS_CALIBRATE[] PROGMEM = "Calibrate";
 const char MENU_TEXT_OPTIONS_CALIBRATE_WEIGHT[] PROGMEM = "Weight: ";
@@ -47,10 +57,23 @@ unsigned int lastRounded = 999;                           //Last rounded sample 
 float lastUnrounded = -1;                                 //Last unrounded sample recorded
 float lastAverageSample = -1;                             //Last average sample recorded, used to calculate delta
 float lastDelta = 0;                                      //Last delta
+ScalesMode scalesMode = ScalesMode::Normal;               //Scales mode
 
 //-------------------------------------------------------------------------------------
 //Menu setup
 //-------------------------------------------------------------------------------------
+LiquidLine mainMenu_Mode_Line1(0, 0, MENU_TEXT_MODE);
+LiquidScreen mainMenu_Mode(mainMenu_Mode_Line1);
+
+LiquidLine mainMenu_modeMenu_Normal_Line1(0, 0, MENU_TEXT_MODE_NORMAL);
+LiquidScreen mainMenu_modeMenu_Normal(mainMenu_modeMenu_Normal_Line1);
+
+LiquidLine mainMenu_modeMenu_Coffee_Line1(0, 0, MENU_TEXT_MODE_COFFEE);
+LiquidScreen mainMenu_modeMenu_Coffee(mainMenu_modeMenu_Coffee_Line1);
+
+LiquidLine mainMenu_modeMenu_Back_Line1(0, 0, MENU_TEXT_BACK);
+LiquidScreen mainMenu_modeMenu_Back(mainMenu_modeMenu_Back_Line1);
+
 LiquidLine mainMenu_Options_Line1(0, 0, MENU_TEXT_OPTIONS);
 LiquidScreen mainMenu_Options(mainMenu_Options_Line1);
 
@@ -67,6 +90,7 @@ LiquidLine mainMenu_optionsMenu_Back_Line1(0, 0, MENU_TEXT_BACK);
 LiquidScreen mainMenu_optionsMenu_Back(mainMenu_optionsMenu_Back_Line1);
 
 LiquidMenu mainMenu(lcd);
+LiquidMenu modeMenu(lcd);
 LiquidMenu optionsMenu(lcd);
 LiquidMenu calibrateMenu(lcd);
 
@@ -77,13 +101,17 @@ void setup()
 {
   RegisterActivity();
   Serial.begin(9600);
-  Serial.println("Configuring lcd");  
+  Serial.println(F("Configuring lcd"));  
 
   lcd.init();
   lcd.backlight();
   lcd.print(F("Please wait..."));
 
   Serial.println(F("Configuring menu"));
+  mainMenu_Mode_Line1.set_asProgmem(1);
+  mainMenu_modeMenu_Normal_Line1.set_asProgmem(1);
+  mainMenu_modeMenu_Coffee_Line1.set_asProgmem(1);
+  mainMenu_modeMenu_Back_Line1.set_asProgmem(1);
   mainMenu_Options_Line1.set_asProgmem(1);
   mainMenu_optionsMenu_Calibrate_Line1.set_asProgmem(1);
   mainMenu_optionsMenu_Calibrate_Weight_Line1.set_asProgmem(1);
@@ -91,13 +119,24 @@ void setup()
   mainMenu_optionsMenu_Back_Line1.set_asProgmem(1);
   
   mainMenu.init();
+  mainMenu.add_screen(mainMenu_Mode);
   mainMenu.add_screen(mainMenu_Options);
+
+  modeMenu.init();
+  modeMenu.add_screen(mainMenu_modeMenu_Normal);
+  modeMenu.add_screen(mainMenu_modeMenu_Coffee);
+  modeMenu.add_screen(mainMenu_modeMenu_Back);
+  
   optionsMenu.init();
   optionsMenu.add_screen(mainMenu_optionsMenu_Calibrate);
   optionsMenu.add_screen(mainMenu_optionsMenu_Rounding);
   optionsMenu.add_screen(mainMenu_optionsMenu_Back);
+
+  calibrateMenu.init();
   calibrateMenu.add_screen(mainMenu_optionsMenu_Calibrate_Weight);
+  
   menuSystem.add_menu(mainMenu);
+  menuSystem.add_menu(modeMenu);
   menuSystem.add_menu(optionsMenu);
   menuSystem.add_menu(calibrateMenu);
 
@@ -168,29 +207,40 @@ void loop()
     else
     {
       bool updated = false;
-      if(enableRounding)
+      
+      if(scalesMode == ScalesMode::Normal)
       {
-        unsigned int curRounded = (unsigned int)bsdRound(lastAverageSample);
-        if(curRounded != lastRounded || forceRefresh)
+        if(enableRounding)
         {
-          lcd.clear();
-          lcd.print(curRounded); 
-          lcd.print(F("g"));
-          lastRounded = curRounded;
-          updated = true;
+          unsigned int curRounded = (unsigned int)bsdRound(lastAverageSample);
+          if(curRounded != lastRounded || forceRefresh)
+          {
+            lcd.clear();
+            lcd.print(curRounded); 
+            lcd.print(F("g"));
+            lastRounded = curRounded;
+            updated = true;
+          }
+        }
+        else
+        {
+          if(lastAverageSample != lastUnrounded || forceRefresh)
+          {
+            lcd.clear();
+            lcd.print(lastAverageSample); 
+            lcd.print(F("g"));
+            lastUnrounded = lastAverageSample;
+            updated = true;
+          }        
         }
       }
       else
       {
-        if(lastAverageSample != lastUnrounded || forceRefresh)
-        {
-          lcd.clear();
-          lcd.print(lastAverageSample); 
-          lcd.print(F("g"));
-          lastUnrounded = lastAverageSample;
-          updated = true;
-        }        
+        lcd.clear();
+        lcd.print(F("Coffee Mode!")); 
+        updated = true;
       }
+      
       if(updated)
       {
         RegisterActivity();
@@ -204,7 +254,7 @@ void loop()
   {
     Serial.print(F("Time since last activity = "));
     Serial.println(timeSinceLastActivity);
-    Sleep(HOME_BUTTON_PIN);
+    Sleep(&lcd, HOME_BUTTON_PIN);
     RegisterActivity();
   }
 }
@@ -227,15 +277,19 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
   else if(key == F("E.B") && buttonState == ButtonState::ButtonDepressed)
   {
       LiquidScreen* curScreen = menuSystem.get_currentScreen();
-      if(curScreen == &mainMenu_Options)
+      if(curScreen == &mainMenu_Mode)
+      {
+        menuSystem.change_menu(modeMenu);
+        menuSystem.change_screen(mainMenu_modeMenu_Normal);
+      }      
+      else if(curScreen == &mainMenu_Options)
       {
         menuSystem.change_menu(optionsMenu);
         menuSystem.change_screen(mainMenu_optionsMenu_Calibrate);
       }     
       else if(curScreen == &mainMenu_optionsMenu_Calibrate)
       {
-        menuSystem.change_menu(calibrateMenu);
-        //menuSystem.change_screen(mainMenu_optionsMenu_Calibrate_Weight);         
+        menuSystem.change_menu(calibrateMenu);       
       }
       else if(curScreen == &mainMenu_optionsMenu_Calibrate_Weight)
       {
@@ -258,7 +312,8 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
         enableRounding = !enableRounding;
         menuRequiresUpdate = true;
       }
-      else if(curScreen == &mainMenu_optionsMenu_Back)
+      else if(curScreen == &mainMenu_optionsMenu_Back ||
+      curScreen == &mainMenu_modeMenu_Back)
       {
         menuSystem.change_menu(mainMenu);
       }
@@ -314,12 +369,12 @@ void RegisterActivity()
   lastActivityMillis = millis();
 }
 
-void Sleep(int pinToWake)
+/*void Sleep(int pinToWake)
 {
   lcd.clear();
   lcd.print(F("Sleeping..."));
   Serial.print(F("Sleeping..."));
-  delay(3000);
+  _delay_ms(3000);
 
   lcd.clear();
   lcd.noBacklight();
@@ -341,4 +396,4 @@ void Sleep(int pinToWake)
 void SleepWakeInterrupt()
 {
   sleep_disable();
-}
+}*/
