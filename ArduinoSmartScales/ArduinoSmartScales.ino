@@ -28,6 +28,25 @@ enum ScalesMode
   Coffee
 };
 
+enum CoffeeModeStep
+{
+  None,
+  Start,
+  PlaceEmptyCarafe,
+  PlaceFilterPaper,
+  WetFilterPaper,
+  EmptyCarafe,
+  AddGrounds,
+  AddWater,
+  Bloom,
+  AddWater1,
+  Stir1,
+  AddWater2,
+  Stir2,
+  Brew,
+  Drink
+};
+
 const char MENU_TEXT_MODE[] PROGMEM = "Mode";
 const char MENU_TEXT_MODE_NORMAL[] PROGMEM = "Normal";
 const char MENU_TEXT_MODE_COFFEE[] PROGMEM = "Coffee";
@@ -58,6 +77,8 @@ float lastUnrounded = -1;                                 //Last unrounded sampl
 float lastAverageSample = -1;                             //Last average sample recorded, used to calculate delta
 float lastDelta = 0;                                      //Last delta
 ScalesMode scalesMode = ScalesMode::Normal;               //Scales mode
+CoffeeModeStep coffeeModeStep = CoffeeModeStep::Start;    //Coffee mode step
+CoffeeModeStep lastCoffeeModeStep = CoffeeModeStep::None; //Last coffee mode step
 
 //-------------------------------------------------------------------------------------
 //Menu setup
@@ -212,32 +233,43 @@ void loop()
       {
         if(enableRounding)
         {
-          unsigned int curRounded = (unsigned int)bsdRound(lastAverageSample);
-          if(curRounded != lastRounded || forceRefresh)
-          {
-            lcd.clear();
-            lcd.print(curRounded); 
-            lcd.print(F("g"));
-            lastRounded = curRounded;
-            updated = true;
-          }
+          updated = displayRoundedSample(true, 0);
         }
         else
         {
-          if(lastAverageSample != lastUnrounded || forceRefresh)
-          {
-            lcd.clear();
-            lcd.print(lastAverageSample); 
-            lcd.print(F("g"));
-            lastUnrounded = lastAverageSample;
-            updated = true;
-          }        
+          updated = displayUnroundedSample(true, 0);       
         }
       }
       else
       {
-        lcd.clear();
-        lcd.print(F("Coffee Mode!")); 
+        bool stepChanged = lastCoffeeModeStep != coffeeModeStep;
+        switch(coffeeModeStep)
+        {
+          case CoffeeModeStep::Start:
+          {
+            if(stepChanged)
+            {
+              lcd.clear();
+              lcd.print(F("Coffee Mode"));
+              lcd.setCursor(0,1);
+              lcd.print(F("Start...")); 
+            }
+            break;
+          }
+          case CoffeeModeStep::PlaceEmptyCarafe:
+          {
+            if(stepChanged)
+            {
+              lcd.clear();
+              lcd.print(F("Place carafe"));
+              lcd.setCursor(0,1);
+              lcd.print(F("Continue...")); 
+            }
+            break;
+          }
+        }
+
+        lastCoffeeModeStep = coffeeModeStep;
         updated = true;
       }
       
@@ -259,6 +291,41 @@ void loop()
   }
 }
 
+bool displayUnroundedSample(
+  bool clearScreen,
+  int line)
+{
+  bool updated = false;
+  if(lastAverageSample != lastUnrounded || forceRefresh)
+  {
+    if(clearScreen) lcd.clear();
+    lcd.setCursor(0, line);
+    lcd.print(lastAverageSample); 
+    lcd.print(F("g"));
+    lastUnrounded = lastAverageSample;
+    updated = true;
+  }
+  return updated;
+}
+
+bool displayRoundedSample(
+  bool clearScreen,
+  int line)
+{
+  bool updated = false;
+  unsigned int curRounded = (unsigned int)bsdRound(lastAverageSample);
+  if(curRounded != lastRounded || forceRefresh)
+  {
+    if(clearScreen) lcd.clear();
+    lcd.setCursor(0, line);
+    lcd.print(curRounded); 
+    lcd.print(F("g"));
+    lastRounded = curRounded;
+    updated = true;
+  }
+  return updated;
+}
+
 void ManagedButtonCallback(String key, ButtonState buttonState)
 {
   if(key == F("H") && buttonState == ButtonState::ButtonDepressed)
@@ -276,46 +343,78 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
   }
   else if(key == F("E.B") && buttonState == ButtonState::ButtonDepressed)
   {
-      LiquidScreen* curScreen = menuSystem.get_currentScreen();
-      if(curScreen == &mainMenu_Mode)
+      if(showingMenu)
       {
-        menuSystem.change_menu(modeMenu);
-        menuSystem.change_screen(mainMenu_modeMenu_Normal);
+        LiquidScreen* curScreen = menuSystem.get_currentScreen();
+  
+        //--------------------------
+        //Mode
+        //--------------------------
+        if(curScreen == &mainMenu_Mode)
+        {
+          menuSystem.change_menu(modeMenu);
+          menuSystem.change_screen(mainMenu_modeMenu_Normal);
+        }
+        else if(curScreen == &mainMenu_modeMenu_Normal)
+        {
+          scalesMode = ScalesMode::Normal;
+          showingMenu = false;
+          readSamples = true;
+          forceRefresh = true;
+        }
+        else if(curScreen == &mainMenu_modeMenu_Coffee)
+        {
+          scalesMode = ScalesMode::Coffee;
+          showingMenu = false;
+          readSamples = true;
+          forceRefresh = true;
+        }
+        //--------------------------
+        //Options
+        //--------------------------
+        else if(curScreen == &mainMenu_Options)
+        {
+          menuSystem.change_menu(optionsMenu);
+          menuSystem.change_screen(mainMenu_optionsMenu_Calibrate);
+        }     
+        else if(curScreen == &mainMenu_optionsMenu_Calibrate)
+        {
+          menuSystem.change_menu(calibrateMenu);       
+        }
+        else if(curScreen == &mainMenu_optionsMenu_Calibrate_Weight)
+        {
+          CalibrateResults calibrateResults = CalibrateScale(
+            &lcd,
+            &loadCell,
+            calibrationFactor,
+            calibrationWeight,
+            HOME_BUTTON_PIN,
+            BASELINEREADINGS);
+  
+          baseline = calibrateResults.Baseline;
+          calibrationFactor = calibrateResults.CalibrationFactor;
+          showingMenu = false;
+          readSamples = true;
+          forceRefresh = true;             
+        }
+        else if(curScreen == &mainMenu_optionsMenu_Rounding)
+        {
+          enableRounding = !enableRounding;
+          menuRequiresUpdate = true;
+        }
+        //--------------------------
+        else if(curScreen == &mainMenu_optionsMenu_Back ||
+                curScreen == &mainMenu_modeMenu_Back)
+        {
+          menuSystem.change_menu(mainMenu);
+        }
       }      
-      else if(curScreen == &mainMenu_Options)
+      else
       {
-        menuSystem.change_menu(optionsMenu);
-        menuSystem.change_screen(mainMenu_optionsMenu_Calibrate);
-      }     
-      else if(curScreen == &mainMenu_optionsMenu_Calibrate)
-      {
-        menuSystem.change_menu(calibrateMenu);       
-      }
-      else if(curScreen == &mainMenu_optionsMenu_Calibrate_Weight)
-      {
-        CalibrateResults calibrateResults = CalibrateScale(
-          &lcd,
-          &loadCell,
-          calibrationFactor,
-          calibrationWeight,
-          HOME_BUTTON_PIN,
-          BASELINEREADINGS);
-
-        baseline = calibrateResults.Baseline;
-        calibrationFactor = calibrateResults.CalibrationFactor;
-        showingMenu = false;
-        readSamples = true;
-        forceRefresh = true;             
-      }
-      else if(curScreen == &mainMenu_optionsMenu_Rounding)
-      {
-        enableRounding = !enableRounding;
-        menuRequiresUpdate = true;
-      }
-      else if(curScreen == &mainMenu_optionsMenu_Back ||
-      curScreen == &mainMenu_modeMenu_Back)
-      {
-        menuSystem.change_menu(mainMenu);
+        if(scalesMode == ScalesMode::Coffee)
+        {
+          coffeeModeStep = (CoffeeModeStep)((int)coffeeModeStep + 1);
+        }
       }
   }
   RegisterActivity();
