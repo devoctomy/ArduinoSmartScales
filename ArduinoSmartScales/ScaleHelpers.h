@@ -105,7 +105,7 @@ CalibrateResults CalibrateScale(
   float prevCalibrationFactor = curCalibrationFactor;
   results.CalibrationFactor = 1;
   scale->set_scale(results.CalibrationFactor);
-  float stepSize = 4.000;
+  float stepSize = 0;
   int unitCount = 3;
   float scaleTop = calibrationWeight + 50.00;
   float sample = scale->get_units(unitCount);
@@ -128,7 +128,7 @@ CalibrateResults CalibrateScale(
     if(positiveDelta < 0) positiveDelta = positiveDelta * -1;
     float pc = positiveDelta / 1000;
     if(pc > 1) pc = 1;
-    stepSize = 20 * pc;
+    stepSize = (20 * pc) * 5;
 
     Serial.print(F("Positive delta: "));
     Serial.println(positiveDelta, 4);

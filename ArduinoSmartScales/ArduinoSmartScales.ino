@@ -18,6 +18,14 @@
 #define ENCODER_BUTTON_PIN 5
 #define BASELINEREADINGS 3
 #define AVERAGESAMPLES 2
+#define MIN_CALIBRATION_WEIGHT 10
+#define MAX_CALIBRATION_WEIGHT 200
+
+const char MENU_TEXT_OPTIONS[] = { "Options" };
+const char MENU_TEXT_OPTIONS_CALIBRATE[] = { "Calibrate" };
+const char MENU_TEXT_OPTIONS_CALIBRATE_WEIGHT[] = { "Weight: " };
+const char MENU_TEXT_OPTIONS_ROUNDING[] = { "Rounding: " };
+const char MENU_TEXT_BACK[] = { "< Back" };
 
 //-------------------------------------------------------------------------------------
 //Global variables
@@ -35,7 +43,6 @@ bool forceRefresh = false;                                //Causes scale readout
 bool requiresCalibration = false;                         //Calibration factor is not valid, calibration needs to be performed
 bool enableRounding = true;                               //Enable / Disable rounding of samples
 bool readSamples = true;                                  //Enable / Disable reading of samples during main program loop
-
 unsigned int lastRounded = 999;                           //Last rounded sample recorded
 float lastUnrounded = -1;                                 //Last unrounded sample recorded
 float lastAverageSample = -1;                             //Last average sample recorded, used to calculate delta
@@ -44,20 +51,24 @@ float lastDelta = 0;                                      //Last delta
 //-------------------------------------------------------------------------------------
 //Menu setup
 //-------------------------------------------------------------------------------------
-LiquidLine mainMenu_Options_Line1(0, 0, "Options");
+LiquidLine mainMenu_Options_Line1(0, 0, MENU_TEXT_OPTIONS);
 LiquidScreen mainMenu_Options(mainMenu_Options_Line1);
 
-LiquidLine mainMenu_optionsMenu_Calibrate_Line1(0, 0, "Calibrate");
+LiquidLine mainMenu_optionsMenu_Calibrate_Line1(0, 0, MENU_TEXT_OPTIONS_CALIBRATE);
 LiquidScreen mainMenu_optionsMenu_Calibrate(mainMenu_optionsMenu_Calibrate_Line1);
 
-LiquidLine mainMenu_optionsMenu_Rounding_Line1(0, 0, "Rounding: ", enableRounding);
+LiquidLine mainMenu_optionsMenu_Calibrate_Weight_Line1(0, 0, MENU_TEXT_OPTIONS_CALIBRATE_WEIGHT, calibrationWeight);
+LiquidScreen mainMenu_optionsMenu_Calibrate_Weight(mainMenu_optionsMenu_Calibrate_Weight_Line1);
+
+LiquidLine mainMenu_optionsMenu_Rounding_Line1(0, 0, MENU_TEXT_OPTIONS_ROUNDING, enableRounding);
 LiquidScreen mainMenu_optionsMenu_Rounding(mainMenu_optionsMenu_Rounding_Line1);
 
-LiquidLine mainMenu_optionsMenu_Back_Line1(0, 0, "< Back");
+LiquidLine mainMenu_optionsMenu_Back_Line1(0, 0, MENU_TEXT_BACK);
 LiquidScreen mainMenu_optionsMenu_Back(mainMenu_optionsMenu_Back_Line1);
 
 LiquidMenu mainMenu(lcd);
 LiquidMenu optionsMenu(lcd);
+LiquidMenu calibrateMenu(lcd);
 
 LiquidSystem menuSystem(0);
 //-------------------------------------------------------------------------------------
@@ -79,8 +90,10 @@ void setup()
   optionsMenu.add_screen(mainMenu_optionsMenu_Calibrate);
   optionsMenu.add_screen(mainMenu_optionsMenu_Rounding);
   optionsMenu.add_screen(mainMenu_optionsMenu_Back);
+  calibrateMenu.add_screen(mainMenu_optionsMenu_Calibrate_Weight);
   menuSystem.add_menu(mainMenu);
   menuSystem.add_menu(optionsMenu);
+  menuSystem.add_menu(calibrateMenu);
 
   Serial.println(F("Configuring buttons"));
   AddManagedButton({
@@ -215,6 +228,11 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
       }     
       else if(curScreen == &mainMenu_optionsMenu_Calibrate)
       {
+        menuSystem.change_menu(calibrateMenu);
+        //menuSystem.change_screen(mainMenu_optionsMenu_Calibrate_Weight);         
+      }
+      else if(curScreen == &mainMenu_optionsMenu_Calibrate_Weight)
+      {
         CalibrateResults calibrateResults = CalibrateScale(
           &lcd,
           &loadCell,
@@ -227,7 +245,7 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
         calibrationFactor = calibrateResults.CalibrationFactor;
         showingMenu = false;
         readSamples = true;
-        forceRefresh = true;          
+        forceRefresh = true;             
       }
       else if(curScreen == &mainMenu_optionsMenu_Rounding)
       {
@@ -243,18 +261,41 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
 
 void ManagedEncoderCallback(String key, EncoderState encoderState)
 {
+  LiquidScreen* curScreen = menuSystem.get_currentScreen();
   if(encoderState == EncoderState::EncoderClockwise)
   {
     if(showingMenu)
-    {
-      menuSystem.next_screen();
+    {      
+      if(curScreen == &mainMenu_optionsMenu_Calibrate_Weight)
+      {
+        if(calibrationWeight < MAX_CALIBRATION_WEIGHT)
+        {
+          calibrationWeight += 5.0;
+        }
+        menuRequiresUpdate = true;
+      }
+      else
+      {
+        menuSystem.next_screen();
+      }
     }
   }
   else
   {
     if(showingMenu)
     {
-      menuSystem.previous_screen();
+      if(curScreen == &mainMenu_optionsMenu_Calibrate_Weight)
+      {
+        if(calibrationWeight > MIN_CALIBRATION_WEIGHT)
+        {
+          calibrationWeight -= 5.0;
+        }
+        menuRequiresUpdate = true;
+      }
+      else
+      {
+        menuSystem.previous_screen();
+      }
     }
   }
   menuRequiresUpdate = true;
