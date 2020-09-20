@@ -542,7 +542,7 @@ bool displayRoundedSample(
     lcd.setCursor(0, line);
 
     lastRoundedOffsetSample = desiredWeight > 0 ? desiredWeight - (curRounded - (unsigned int)bsdRound(offset)) : (curRounded - (unsigned int)bsdRound(offset));
-    String sampleString = String(lastRoundedOffsetSample);
+    String sampleString = String((unsigned int)lastRoundedOffsetSample);
     sampleString += F("g");
     while(sampleString.length() < 15)
     {
