@@ -79,6 +79,7 @@ float lastDelta = 0;                                      //Last delta
 ScalesMode scalesMode = ScalesMode::Normal;               //Scales mode
 CoffeeModeStep coffeeModeStep = CoffeeModeStep::Start;    //Coffee mode step
 CoffeeModeStep lastCoffeeModeStep = CoffeeModeStep::None; //Last coffee mode step
+bool ignoreHome = false;                              //Ignore the next press of the home button
 
 //-------------------------------------------------------------------------------------
 //Menu setup
@@ -231,14 +232,7 @@ void loop()
       
       if(scalesMode == ScalesMode::Normal)
       {
-        if(enableRounding)
-        {
-          updated = displayRoundedSample(true, 0);
-        }
-        else
-        {
-          updated = displayUnroundedSample(true, 0);       
-        }
+        updated = displaySample(true, 0, false);
       }
       else
       {
@@ -247,30 +241,41 @@ void loop()
         {
           case CoffeeModeStep::Start:
           {
-            if(stepChanged)
+            if(stepChanged || forceRefresh)
             {
               lcd.clear();
               lcd.print(F("Coffee Mode"));
               lcd.setCursor(0,1);
-              lcd.print(F("Start...")); 
+              lcd.print(F("Start..."));
+              updated = true;
             }
             break;
           }
           case CoffeeModeStep::PlaceEmptyCarafe:
           {
-            if(stepChanged)
+            if(stepChanged || forceRefresh)
             {
               lcd.clear();
               lcd.print(F("Place carafe"));
-              lcd.setCursor(0,1);
-              lcd.print(F("Continue...")); 
             }
+            updated = displaySample(false, 1, true);
+            
+            break;
+          }
+          case CoffeeModeStep::PlaceFilterPaper:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("Place filter"));
+            }
+            updated = displaySample(false, 1, true);
+            
             break;
           }
         }
 
-        lastCoffeeModeStep = coffeeModeStep;
-        updated = true;
+        lastCoffeeModeStep = coffeeModeStep;     
       }
       
       if(updated)
@@ -286,22 +291,54 @@ void loop()
   {
     Serial.print(F("Time since last activity = "));
     Serial.println(timeSinceLastActivity);
+    ignoreHome = true;
     Sleep(&lcd, HOME_BUTTON_PIN);
     RegisterActivity();
+    forceRefresh = true;
   }
+}
+
+bool displaySample(
+  bool clearScreen,
+  int line,
+  bool addNextGlyph)
+{
+  bool updated;
+  if(enableRounding)
+  {
+    updated = displayRoundedSample(
+      clearScreen,
+      line,
+      addNextGlyph);
+  }
+  else
+  {
+    updated = displayUnroundedSample(
+      clearScreen,
+      line,
+      addNextGlyph);       
+  }
+  return updated;
 }
 
 bool displayUnroundedSample(
   bool clearScreen,
-  int line)
+  int line,
+  bool addNextGlyph)
 {
   bool updated = false;
   if(lastAverageSample != lastUnrounded || forceRefresh)
   {
     if(clearScreen) lcd.clear();
     lcd.setCursor(0, line);
-    lcd.print(lastAverageSample); 
-    lcd.print(F("g"));
+    String sampleString = String(lastAverageSample);
+    sampleString += F("g");
+    while(sampleString.length() < 15)
+    {
+      sampleString += F(" ");
+    }
+    if(addNextGlyph) sampleString[14] = (char)62;
+    lcd.print(sampleString);
     lastUnrounded = lastAverageSample;
     updated = true;
   }
@@ -310,7 +347,8 @@ bool displayUnroundedSample(
 
 bool displayRoundedSample(
   bool clearScreen,
-  int line)
+  int line,
+  bool addNextGlyph)
 {
   bool updated = false;
   unsigned int curRounded = (unsigned int)bsdRound(lastAverageSample);
@@ -318,8 +356,14 @@ bool displayRoundedSample(
   {
     if(clearScreen) lcd.clear();
     lcd.setCursor(0, line);
-    lcd.print(curRounded); 
-    lcd.print(F("g"));
+    String sampleString = String(curRounded);
+    sampleString += F("g");
+    while(sampleString.length() < 15)
+    {
+      sampleString += F(" ");
+    }
+    if(addNextGlyph) sampleString[14] = (char)62;
+    lcd.print(sampleString);
     lastRounded = curRounded;
     updated = true;
   }
@@ -330,16 +374,23 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
 {
   if(key == F("H") && buttonState == ButtonState::ButtonDepressed)
   {
-      showingMenu = !showingMenu;
-      readSamples = !showingMenu;
-      if(showingMenu)
-      {
-        menuSystem.change_menu(mainMenu);
-      }
-      else
-      {
-        forceRefresh = true;
-      }
+    Serial.println("Home depressed!");
+    if(ignoreHome)
+    {
+      ignoreHome = false;
+      return;  
+    }
+    
+    showingMenu = !showingMenu;
+    readSamples = !showingMenu;
+    if(showingMenu)
+    {
+      menuSystem.change_menu(mainMenu);
+    }
+    else
+    {
+      forceRefresh = true;
+    }
   }
   else if(key == F("E.B") && buttonState == ButtonState::ButtonDepressed)
   {
@@ -414,6 +465,7 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
         if(scalesMode == ScalesMode::Coffee)
         {
           coffeeModeStep = (CoffeeModeStep)((int)coffeeModeStep + 1);
+          forceRefresh = true;
         }
       }
   }
@@ -467,32 +519,3 @@ void RegisterActivity()
 {
   lastActivityMillis = millis();
 }
-
-/*void Sleep(int pinToWake)
-{
-  lcd.clear();
-  lcd.print(F("Sleeping..."));
-  Serial.print(F("Sleeping..."));
-  _delay_ms(3000);
-
-  lcd.clear();
-  lcd.noBacklight();
-  Serial.println(F("Attaching interrupt!"));
-  int prevPinMode = GetPinMode(pinToWake);
-  pinMode (pinToWake, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(pinToWake), SleepWakeInterrupt, FALLING);
-  
-  Serial.flush();
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  sleep_enable();
-  sleep_cpu();
-
-  pinMode (pinToWake, prevPinMode);
-  detachInterrupt(digitalPinToInterrupt(pinToWake));
-  lcd.backlight();
-}
-
-void SleepWakeInterrupt()
-{
-  sleep_disable();
-}*/
