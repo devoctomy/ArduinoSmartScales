@@ -474,16 +474,15 @@ void PauseWithCountdown(
   lcd.clear();
   lcd.print(title);
   lcd.setCursor(0, 1);
-  lcd.print("Please wait...");
+  lcd.print(F("Please wait..."));
   delay(2000);
   unsigned long start = millis();
   unsigned long elapsed = millis() - start;
   while(elapsed < (pauseMillis - 2000))
   {
     lcd.setCursor(0, 1);
-    elapsed = millis() - start;
-    unsigned long remaining = bsdRound(((pauseMillis - 2000) - elapsed) / 1000);
-    String remainingString = String(remaining >= 0 ? remaining : 0);
+    unsigned long remaining = bsdRound(((pauseMillis - 2000) - elapsed) / 1000);    //remaining time in whole seconds
+    String remainingString = String(remaining > 0 ? remaining : 0);
     remainingString += F("s");
     while(remainingString.length() < 15)
     {
@@ -492,6 +491,7 @@ void PauseWithCountdown(
     lcd.print(remainingString.c_str());
     delay(1000);
     RegisterActivity();
+    elapsed = millis() - start;
   }
 }
 
