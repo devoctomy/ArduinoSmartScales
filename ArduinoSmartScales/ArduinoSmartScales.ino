@@ -28,14 +28,15 @@ float calibrationFactor = 429.24;                         //Default calibration 
 float calibrationWeight = 200.00;                         //Weight required for calibration
 long baseline = 0;                                        //Baseline value
 bool menuRequiresUpdate = true;                           //Causes menu to be refreshed
-int lastActivityMillis = 0;                               //Millisecond count that last activity was recorded
-int startMillis = 0;                                      //Millisecond count that the system started
+unsigned long lastActivityMillis = 0;                     //Millisecond count that last activity was recorded
+unsigned long startMillis = 0;                            //Millisecond count that the system started
 bool showingMenu = false;                                 //Signifies that the menu is currently being displayed
 bool forceRefresh = false;                                //Causes scale readout to be refreshed, reguardless of it changing or not
 bool requiresCalibration = false;                         //Calibration factor is not valid, calibration needs to be performed
 bool enableRounding = true;                               //Enable / Disable rounding of samples
 bool readSamples = true;                                  //Enable / Disable reading of samples during main program loop
-int lastRounded = -1;                                     //Last rounded sample recorded
+
+unsigned int lastRounded = 999;                           //Last rounded sample recorded
 float lastUnrounded = -1;                                 //Last unrounded sample recorded
 float lastAverageSample = -1;                             //Last average sample recorded, used to calculate delta
 float lastDelta = 0;                                      //Last delta
@@ -117,9 +118,7 @@ void loop()
 {
   if(readSamples)
   {
-    Serial.println(F("Getting sample"));
     float averageSample = GetAveragedSample(&loadCell, AVERAGESAMPLES);
-    Serial.println(F("Got sample"));
     if(lastAverageSample == -1) lastAverageSample = averageSample;
     lastDelta = averageSample - lastAverageSample;
     lastAverageSample = averageSample;
@@ -152,12 +151,12 @@ void loop()
       bool updated = false;
       if(enableRounding)
       {
-        int curRounded = (int)bsdRound(lastAverageSample);
+        unsigned int curRounded = (unsigned int)bsdRound(lastAverageSample);
         if(curRounded != lastRounded || forceRefresh)
         {
           lcd.clear();
           lcd.print(curRounded); 
-          lcd.print("g");
+          lcd.print(F("g"));
           lastRounded = curRounded;
           updated = true;
         }

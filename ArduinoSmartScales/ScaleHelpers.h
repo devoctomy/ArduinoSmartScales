@@ -86,9 +86,6 @@ CalibrateResults CalibrateScale(
   char data[24];
   
   lcd->clear();
-  lcd->print(F("Please wait..."));
-  delay(5000);
-  lcd->clear();
   lcd->print(F("Clear scale..."));
   delay(5000);
   scale->set_scale();
@@ -106,12 +103,12 @@ CalibrateResults CalibrateScale(
   lcd->print(F("Calibrating..."));
   stopCalibrating = false;
   float prevCalibrationFactor = curCalibrationFactor;
-  results.CalibrationFactor = 0;
+  results.CalibrationFactor = 1;
   scale->set_scale(results.CalibrationFactor);
   float stepSize = 4.000;
   int unitCount = 3;
+  float scaleTop = calibrationWeight + 50.00;
   float sample = scale->get_units(unitCount);
-  if(sample < 0) sample = 0;
   while(sample != calibrationWeight)
   {
     if(stopCalibrating)
@@ -125,42 +122,27 @@ CalibrateResults CalibrateScale(
       scale->set_scale(results.CalibrationFactor);  
       return results;
     }
-    
+
     float delta = sample - calibrationWeight;
-    if(delta <= 0.2 && delta >= -0.2)
+    float positiveDelta = delta;
+    if(positiveDelta < 0) positiveDelta = positiveDelta * -1;
+    float pc = positiveDelta / 1000;
+    if(pc > 1) pc = 1;
+    stepSize = 20 * pc;
+
+    Serial.print(F("Positive delta: "));
+    Serial.println(positiveDelta, 4);
+    
+    if(positiveDelta <= 0.2)
     {
       break;
     }
-    else if(delta < 2 && delta > -2 && stepSize > 0.001)
-    {
-      stepSize -= 0.001;
-      unitCount = 10;
-    }
-    else if(delta < 5 && delta > -5 && stepSize > 0.01)
-    {
-       stepSize -= 0.010;
-       unitCount = 7;
-    }
-    else if(delta < 10 && delta > -10 && stepSize != 1.0)
-    {
-      stepSize = 1.000;
-      unitCount = 5;
-    }
-    else if(delta < 50 && delta > -50 && stepSize != 2.0)
-    {
-      stepSize = 2.000;
-      unitCount = 4;
-    }
-
-    Serial.print(F("Step size: "));
-    Serial.println(stepSize);
      
     memset(data, 0, sizeof(data));   
     String sampleString = String(sample);
     String cfString = String(results.CalibrationFactor);
 
     sprintf(data, "%s / %s", sampleString.c_str(), cfString.c_str());
-    Serial.println(data);
     lcd->setCursor(0,1);
     lcd->print(data);
     
@@ -181,10 +163,10 @@ CalibrateResults CalibrateScale(
   EEPROM.put(0, results.CalibrationFactor);
 
   lcd->clear();
-  lcd->print(F("Complete,"));
+  lcd->print(F("Calibration"));
   lcd->setCursor(0,1);
-  lcd->print(F("Clear scale..."));
-  delay(5000);
+  lcd->print(F("Complete"));
+  delay(2000);
 
   return results;
 }
