@@ -37,12 +37,9 @@ enum CoffeeModeStep
   WetFilterPaper,
   EmptyCarafe,
   AddGrounds,
-  AddWater,
+  FirstPour,
   Bloom,
-  AddWater1,
-  Stir1,
-  AddWater2,
-  Stir2,
+  AddWater,
   Brew,
   Drink
 };
@@ -59,27 +56,31 @@ const char MENU_TEXT_BACK[] PROGMEM = "< Back";
 //-------------------------------------------------------------------------------------
 //Global variables
 //-------------------------------------------------------------------------------------
-LiquidCrystal_I2C lcd(0x27, 16, 2);                       //lcd object
-HX711 loadCell;                                           //scale object
-float calibrationFactor = 429.24;                         //Default calibration factor
-float calibrationWeight = 200.00;                         //Weight required for calibration
-long baseline = 0;                                        //Baseline value
-bool menuRequiresUpdate = true;                           //Causes menu to be refreshed
-unsigned long lastActivityMillis = 0;                     //Millisecond count that last activity was recorded
-unsigned long startMillis = 0;                            //Millisecond count that the system started
-bool showingMenu = false;                                 //Signifies that the menu is currently being displayed
-bool forceRefresh = false;                                //Causes scale readout to be refreshed, reguardless of it changing or not
-bool requiresCalibration = false;                         //Calibration factor is not valid, calibration needs to be performed
-bool enableRounding = true;                               //Enable / Disable rounding of samples
-bool readSamples = true;                                  //Enable / Disable reading of samples during main program loop
-unsigned int lastRounded = 999;                           //Last rounded sample recorded
-float lastUnrounded = -1;                                 //Last unrounded sample recorded
-float lastAverageSample = -1;                             //Last average sample recorded, used to calculate delta
-float lastDelta = 0;                                      //Last delta
-ScalesMode scalesMode = ScalesMode::Normal;               //Scales mode
-CoffeeModeStep coffeeModeStep = CoffeeModeStep::Start;    //Coffee mode step
-CoffeeModeStep lastCoffeeModeStep = CoffeeModeStep::None; //Last coffee mode step
-bool ignoreHome = false;                              //Ignore the next press of the home button
+LiquidCrystal_I2C lcd(0x27, 16, 2);                             //lcd object
+HX711 loadCell;                                                 //scale object
+float calibrationFactor = 429.24;                               //Default calibration factor
+float calibrationWeight = 200.00;                               //Weight required for calibration
+long baseline = 0;                                              //Baseline value
+bool menuRequiresUpdate = true;                                 //Causes menu to be refreshed
+unsigned long lastActivityMillis = 0;                           //Millisecond count that last activity was recorded
+unsigned long startMillis = 0;                                  //Millisecond count that the system started
+bool showingMenu = false;                                       //Signifies that the menu is currently being displayed
+bool forceRefresh = false;                                      //Causes scale readout to be refreshed, reguardless of it changing or not
+bool requiresCalibration = false;                               //Calibration factor is not valid, calibration needs to be performed
+bool enableRounding = true;                                     //Enable / Disable rounding of samples
+bool readSamples = true;                                        //Enable / Disable reading of samples during main program loop
+unsigned int lastRounded = 999;                                 //Last rounded sample recorded
+float lastUnrounded = -1;                                       //Last unrounded sample recorded
+float lastAverageSample = -1;                                   //Last average sample recorded, used to calculate delta
+float lastUnroundedOffsetSample = -1;                           //Last offset value, that being the desired weight - current unrounded weight
+float lastRoundedOffsetSample = -1;                             //Last offset value, that being the desired weight - current rounded weight
+float lastDelta = 0;                                            //Last delta
+ScalesMode scalesMode = ScalesMode::Normal;                     //Scales mode
+CoffeeModeStep coffeeModeStep = CoffeeModeStep::Start;          //Coffee mode step
+CoffeeModeStep lastCoffeeModeStep = CoffeeModeStep::None;       //Last coffee mode step
+bool ignoreHome = false;                                        //Ignore the next press of the home button
+float curCoffeeModeStepSampleOffset = 0.0;                      //Ammount to offset the sample readout by
+float curCoffeeModeStepDesiredWeight = 0.0;                     //Desired weight, this causes the scales to display how much is to be added until the desired weight is reached
 
 //-------------------------------------------------------------------------------------
 //Menu setup
@@ -232,7 +233,12 @@ void loop()
       
       if(scalesMode == ScalesMode::Normal)
       {
-        updated = displaySample(true, 0, false);
+        updated = displaySample(
+          true,
+          0,
+          0,
+          0,
+          false);
       }
       else
       {
@@ -246,7 +252,8 @@ void loop()
               lcd.clear();
               lcd.print(F("Coffee Mode"));
               lcd.setCursor(0,1);
-              lcd.print(F("Start..."));
+              lcd.print(F("Start         "));
+              lcd.print((char)62);
               updated = true;
             }
             break;
@@ -258,7 +265,12 @@ void loop()
               lcd.clear();
               lcd.print(F("Place carafe"));
             }
-            updated = displaySample(false, 1, true);
+            updated = displaySample(
+              false,
+              1,
+              curCoffeeModeStepSampleOffset,
+              curCoffeeModeStepDesiredWeight,
+              true);
             
             break;
           }
@@ -269,9 +281,137 @@ void loop()
               lcd.clear();
               lcd.print(F("Place filter"));
             }
-            updated = displaySample(false, 1, true);
+            updated = displaySample(
+              false,
+              1,
+              curCoffeeModeStepSampleOffset,
+              curCoffeeModeStepDesiredWeight,
+              true);
             
             break;
+          }
+          case CoffeeModeStep::WetFilterPaper:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("Wet paper"));
+              lcd.setCursor(0, 1);
+              lcd.print(F("Next          "));
+              lcd.print((char)62);
+              updated = true;
+            }
+            
+            break;
+          }
+          case CoffeeModeStep::EmptyCarafe:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("Empty carafe"));
+              lcd.setCursor(0, 1);
+              lcd.print(F("Next          "));
+              lcd.print((char)62);
+              updated = true;
+            }
+            
+            break;               
+          }
+          case CoffeeModeStep::AddGrounds:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("Add grounds"));
+            }
+            updated = displaySample(
+              false,
+              1,
+              curCoffeeModeStepSampleOffset,
+              curCoffeeModeStepDesiredWeight,
+              true);
+                          
+            break;               
+          }   
+          case CoffeeModeStep::FirstPour:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("First pour"));
+            }             
+            updated = displaySample(
+              false,
+              1,
+              curCoffeeModeStepSampleOffset,
+              curCoffeeModeStepDesiredWeight,
+              true);              
+
+            if(DesiredWeightReached())
+            {
+              InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
+            }
+
+            break;
+          }
+          case CoffeeModeStep::Bloom:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("Blooming..."));
+              lcd.setCursor(0, 1);
+              lcd.print(F("Please wait..."));
+            }
+            _delay_ms(2000);
+            
+            PauseWithCountdown(45000);
+            InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
+          }
+          case CoffeeModeStep::AddWater:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("Add water"));
+            }             
+            updated = displaySample(
+              false,
+              1,
+              curCoffeeModeStepSampleOffset,
+              curCoffeeModeStepDesiredWeight,
+              true);
+
+            if(DesiredWeightReached())
+            {
+              InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
+            }
+          }
+          case CoffeeModeStep::Brew:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("Brewing..."));
+              lcd.setCursor(0, 1);
+              lcd.print(F("Please wait..."));
+            }
+            _delay_ms(2000);
+            
+            PauseWithCountdown(120000);
+            InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));            
+          }
+          case CoffeeModeStep::Drink:
+          {
+            if(stepChanged || forceRefresh)
+            {
+              lcd.clear();
+              lcd.print(F("All done!"));
+              lcd.setCursor(0, 1);
+              lcd.print(F("Enjoy"));
+              updated = true;
+            }          
           }
         }
 
@@ -298,9 +438,44 @@ void loop()
   }
 }
 
+bool DesiredWeightReached()
+{
+  if(enableRounding)
+  {
+    return lastRoundedOffsetSample <= 0;
+  }
+  else
+  {
+    return lastUnroundedOffsetSample <= 0;
+  }
+}
+
+void PauseWithCountdown(unsigned long pauseMillis)
+{
+  lcd.clear();
+  lcd.print("Please wait...");
+  unsigned long start = millis();
+  unsigned long elapsed = millis() - start;
+  while(elapsed > pauseMillis)
+  {
+    lcd.setCursor(0, 1);
+    unsigned long remaining = bsdRound((pauseMillis - elapsed) / 1000);
+    String remainingString = String(remaining);
+    remainingString += "s";
+    while(remainingString.length() < 15)
+    {
+      remainingString += F(" ");
+    }
+    lcd.print(remainingString);
+    _delay_ms(1000);
+  }
+}
+
 bool displaySample(
   bool clearScreen,
   int line,
+  float offset,
+  float desiredWeight,
   bool addNextGlyph)
 {
   bool updated;
@@ -309,6 +484,8 @@ bool displaySample(
     updated = displayRoundedSample(
       clearScreen,
       line,
+      offset,
+      desiredWeight,
       addNextGlyph);
   }
   else
@@ -316,6 +493,8 @@ bool displaySample(
     updated = displayUnroundedSample(
       clearScreen,
       line,
+      offset,
+      desiredWeight,
       addNextGlyph);       
   }
   return updated;
@@ -324,6 +503,8 @@ bool displaySample(
 bool displayUnroundedSample(
   bool clearScreen,
   int line,
+  float offset,
+  float desiredWeight,
   bool addNextGlyph)
 {
   bool updated = false;
@@ -331,7 +512,8 @@ bool displayUnroundedSample(
   {
     if(clearScreen) lcd.clear();
     lcd.setCursor(0, line);
-    String sampleString = String(lastAverageSample);
+    lastUnroundedOffsetSample = desiredWeight > 0 ? desiredWeight - (lastAverageSample - offset) : (lastAverageSample - offset);
+    String sampleString = String(lastUnroundedOffsetSample);
     sampleString += F("g");
     while(sampleString.length() < 15)
     {
@@ -348,6 +530,8 @@ bool displayUnroundedSample(
 bool displayRoundedSample(
   bool clearScreen,
   int line,
+  float offset,
+  float desiredWeight,
   bool addNextGlyph)
 {
   bool updated = false;
@@ -356,7 +540,9 @@ bool displayRoundedSample(
   {
     if(clearScreen) lcd.clear();
     lcd.setCursor(0, line);
-    String sampleString = String(curRounded);
+
+    lastRoundedOffsetSample = desiredWeight > 0 ? desiredWeight - (curRounded - (unsigned int)bsdRound(offset)) : (curRounded - (unsigned int)bsdRound(offset));
+    String sampleString = String(lastRoundedOffsetSample);
     sampleString += F("g");
     while(sampleString.length() < 15)
     {
@@ -454,6 +640,8 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
           menuRequiresUpdate = true;
         }
         //--------------------------
+        //Back buttons
+        //--------------------------
         else if(curScreen == &mainMenu_optionsMenu_Back ||
                 curScreen == &mainMenu_modeMenu_Back)
         {
@@ -464,12 +652,72 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
       {
         if(scalesMode == ScalesMode::Coffee)
         {
-          coffeeModeStep = (CoffeeModeStep)((int)coffeeModeStep + 1);
+          InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
           forceRefresh = true;
         }
       }
   }
   RegisterActivity();
+}
+
+void InitCoffeeModeStep(CoffeeModeStep desiredCoffeeModeStep)
+{
+  if(coffeeModeStep == desiredCoffeeModeStep)
+  {
+    return;  
+  }
+
+  coffeeModeStep = desiredCoffeeModeStep;
+  switch(coffeeModeStep)
+  {
+    case CoffeeModeStep::PlaceEmptyCarafe:
+    {
+      curCoffeeModeStepSampleOffset = 0;
+      break;
+    }
+    case CoffeeModeStep::PlaceFilterPaper:
+    {
+      curCoffeeModeStepSampleOffset = lastAverageSample;                                      //Ack weight of carafe from previous step
+      break;
+    }
+    case CoffeeModeStep::WetFilterPaper:
+    {
+      curCoffeeModeStepSampleOffset += (lastAverageSample - curCoffeeModeStepSampleOffset);   //Ack weight of dry filter paper from previous step
+      break;
+    }
+    case CoffeeModeStep::EmptyCarafe:
+    {
+      //Do nothing in this step
+      break;
+    }
+    case CoffeeModeStep::AddGrounds:
+    {
+      curCoffeeModeStepDesiredWeight = 15;                                                    //Set the weight of grounds we want to measure out
+      curCoffeeModeStepSampleOffset += (lastAverageSample - curCoffeeModeStepSampleOffset);   //Ack weight of filter paper being wet from 2 steps ago
+      break;
+    }
+    case CoffeeModeStep::FirstPour:
+    {
+      curCoffeeModeStepDesiredWeight = 60;                                                    //Set the weight of water we want to measure out
+      curCoffeeModeStepSampleOffset += (lastAverageSample - curCoffeeModeStepSampleOffset);   //Ack weight of grounds from previous step
+      break;
+    }
+    case CoffeeModeStep::Bloom:
+    {
+      curCoffeeModeStepSampleOffset += (lastAverageSample - curCoffeeModeStepSampleOffset);   //Ack weight of water from previous step
+      break;
+    } 
+    case CoffeeModeStep::AddWater:
+    {
+      curCoffeeModeStepDesiredWeight = 240;
+      break;
+    }
+    case CoffeeModeStep::Brew:
+    {
+      curCoffeeModeStepSampleOffset += (lastAverageSample - curCoffeeModeStepSampleOffset);   //Ack weight of water from previous step
+      break;      
+    }
+  }  
 }
 
 void ManagedEncoderCallback(String key, EncoderState encoderState)
