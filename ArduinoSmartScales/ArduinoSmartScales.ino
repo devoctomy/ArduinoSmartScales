@@ -422,7 +422,7 @@ void loop()
             lcd.print(F("All done!"));
             lcd.setCursor(0, 1);
             lcd.print(F("Enjoy"));
-            _delay_ms(5000);
+            delay(5000);
             scalesMode = ScalesMode::Normal;
             showingMenu = false;
             readSamples = true;
@@ -475,7 +475,7 @@ void PauseWithCountdown(
   lcd.print(title);
   lcd.setCursor(0, 1);
   lcd.print("Please wait...");
-  _delay_ms(2000);
+  delay(2000);
   unsigned long start = millis();
   unsigned long elapsed = millis() - start;
   while(elapsed < (pauseMillis - 2000))
@@ -490,7 +490,7 @@ void PauseWithCountdown(
       remainingString += F(" ");
     }
     lcd.print(remainingString.c_str());
-    _delay_ms(1000);
+    delay(1000);
     RegisterActivity();
   }
 }
@@ -695,9 +695,9 @@ void InitCoffeeModeStep(CoffeeModeStep desiredCoffeeModeStep)
     return;  
   }
 
-  lcd.clear();
-  curCoffeeModeStepRequiresNextClick = false;
   coffeeModeStep = desiredCoffeeModeStep;
+  curCoffeeModeStepRequiresNextClick = false;
+  lcd.clear();
   switch(coffeeModeStep)
   {
     case CoffeeModeStep::PlaceEmptyCarafe:

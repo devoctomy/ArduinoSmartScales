@@ -87,7 +87,7 @@ CalibrateResults CalibrateScale(
   
   lcd->clear();
   lcd->print(F("Clear scale..."));
-  _delay_ms(5000);
+  delay(5000);
   scale->set_scale();
   scale->tare();
   scale->set_scale(0);
@@ -97,7 +97,7 @@ CalibrateResults CalibrateScale(
   memset(data, 0, sizeof(data));
   sprintf(data, "Place %sg", weight.c_str());
   lcd->print(data);
-  _delay_ms(5000);
+  delay(5000);
 
   lcd->clear();
   lcd->print(F("Calibrating..."));
@@ -117,7 +117,7 @@ CalibrateResults CalibrateScale(
       pinMode (homeButtonPin, prevPinMode);
       lcd->clear();
       lcd->print(F("Aborting..."));
-      _delay_ms(5000);
+      delay(5000);
       results.CalibrationFactor = prevCalibrationFactor;
       scale->set_scale(results.CalibrationFactor);  
       return results;
@@ -166,7 +166,7 @@ CalibrateResults CalibrateScale(
   lcd->print(F("Calibration"));
   lcd->setCursor(0,1);
   lcd->print(F("Complete"));
-  _delay_ms(2000);
+  delay(2000);
 
   return results;
 }

@@ -10,7 +10,7 @@ void Sleep(
   lcd->clear();
   lcd->print(F("Sleeping..."));
   Serial.print(F("Sleeping..."));
-  _delay_ms(3000);
+  delay(3000);
 
   lcd->clear();
   lcd->noBacklight();
