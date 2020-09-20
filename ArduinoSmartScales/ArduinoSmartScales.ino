@@ -21,11 +21,11 @@
 #define MIN_CALIBRATION_WEIGHT 10
 #define MAX_CALIBRATION_WEIGHT 200
 
-const char MENU_TEXT_OPTIONS[] = { "Options" };
-const char MENU_TEXT_OPTIONS_CALIBRATE[] = { "Calibrate" };
-const char MENU_TEXT_OPTIONS_CALIBRATE_WEIGHT[] = { "Weight: " };
-const char MENU_TEXT_OPTIONS_ROUNDING[] = { "Rounding: " };
-const char MENU_TEXT_BACK[] = { "< Back" };
+const char MENU_TEXT_OPTIONS[] PROGMEM = "Options";
+const char MENU_TEXT_OPTIONS_CALIBRATE[] PROGMEM = "Calibrate";
+const char MENU_TEXT_OPTIONS_CALIBRATE_WEIGHT[] PROGMEM = "Weight: ";
+const char MENU_TEXT_OPTIONS_ROUNDING[] PROGMEM = "Rounding: ";
+const char MENU_TEXT_BACK[] PROGMEM = "< Back";
 
 //-------------------------------------------------------------------------------------
 //Global variables
@@ -84,6 +84,12 @@ void setup()
   lcd.print(F("Please wait..."));
 
   Serial.println(F("Configuring menu"));
+  mainMenu_Options_Line1.set_asProgmem(1);
+  mainMenu_optionsMenu_Calibrate_Line1.set_asProgmem(1);
+  mainMenu_optionsMenu_Calibrate_Weight_Line1.set_asProgmem(1);
+  mainMenu_optionsMenu_Rounding_Line1.set_asProgmem(1);
+  mainMenu_optionsMenu_Back_Line1.set_asProgmem(1);
+  
   mainMenu.init();
   mainMenu.add_screen(mainMenu_Options);
   optionsMenu.init();
@@ -257,6 +263,7 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
         menuSystem.change_menu(mainMenu);
       }
   }
+  RegisterActivity();
 }
 
 void ManagedEncoderCallback(String key, EncoderState encoderState)
@@ -299,6 +306,7 @@ void ManagedEncoderCallback(String key, EncoderState encoderState)
     }
   }
   menuRequiresUpdate = true;
+  RegisterActivity();
 }
 
 void RegisterActivity()
