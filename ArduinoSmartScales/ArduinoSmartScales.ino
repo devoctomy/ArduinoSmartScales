@@ -81,6 +81,7 @@ CoffeeModeStep lastCoffeeModeStep = CoffeeModeStep::None;       //Last coffee mo
 bool ignoreHome = false;                                        //Ignore the next press of the home button
 float curCoffeeModeStepSampleOffset = 0.0;                      //Ammount to offset the sample readout by
 float curCoffeeModeStepDesiredWeight = 0.0;                     //Desired weight, this causes the scales to display how much is to be added until the desired weight is reached
+bool curCoffeeModeStepRequiresNextClick = false;                //Determines if the current coffee mode step requires that next be clicked (push down on encoder)
 
 //-------------------------------------------------------------------------------------
 //Menu setup
@@ -260,6 +261,8 @@ void loop()
           }
           case CoffeeModeStep::PlaceEmptyCarafe:
           {
+            Serial.println(F("Place carafe"));
+            
             if(stepChanged || forceRefresh)
             {
               lcd.clear();
@@ -276,6 +279,8 @@ void loop()
           }
           case CoffeeModeStep::PlaceFilterPaper:
           {
+            Serial.println(F("Place filter paper"));
+
             if(stepChanged || forceRefresh)
             {
               lcd.clear();
@@ -292,6 +297,8 @@ void loop()
           }
           case CoffeeModeStep::WetFilterPaper:
           {
+            Serial.println(F("Wet filter paper"));
+            
             if(stepChanged || forceRefresh)
             {
               lcd.clear();
@@ -306,6 +313,8 @@ void loop()
           }
           case CoffeeModeStep::EmptyCarafe:
           {
+            Serial.println(F("Empty carafe"));
+            
             if(stepChanged || forceRefresh)
             {
               lcd.clear();
@@ -320,6 +329,8 @@ void loop()
           }
           case CoffeeModeStep::AddGrounds:
           {
+            Serial.println(F("Add grounds"));
+            
             if(stepChanged || forceRefresh)
             {
               lcd.clear();
@@ -331,11 +342,18 @@ void loop()
               curCoffeeModeStepSampleOffset,
               curCoffeeModeStepDesiredWeight,
               true);
+
+            if(DesiredWeightReached())
+            {
+              InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
+            }
                           
             break;               
           }   
           case CoffeeModeStep::FirstPour:
           {
+            Serial.println(F("First pour"));
+            
             if(stepChanged || forceRefresh)
             {
               lcd.clear();
@@ -357,20 +375,17 @@ void loop()
           }
           case CoffeeModeStep::Bloom:
           {
-            if(stepChanged || forceRefresh)
-            {
-              lcd.clear();
-              lcd.print(F("Blooming..."));
-              lcd.setCursor(0, 1);
-              lcd.print(F("Please wait..."));
-            }
-            _delay_ms(2000);
+            Serial.println(F("Bloom"));
             
-            PauseWithCountdown(45000);
+            PauseWithCountdown(F("Blooming..."), 45000);
             InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
+
+            break;
           }
           case CoffeeModeStep::AddWater:
           {
+            Serial.println(F("Add water"));
+            
             if(stepChanged || forceRefresh)
             {
               lcd.clear();
@@ -387,31 +402,33 @@ void loop()
             {
               InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
             }
+
+            break;
           }
           case CoffeeModeStep::Brew:
           {
-            if(stepChanged || forceRefresh)
-            {
-              lcd.clear();
-              lcd.print(F("Brewing..."));
-              lcd.setCursor(0, 1);
-              lcd.print(F("Please wait..."));
-            }
-            _delay_ms(2000);
+            Serial.println(F("Brew"));
             
-            PauseWithCountdown(120000);
-            InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));            
+            PauseWithCountdown(F("Brewing"), 120000);
+            InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1)); 
+
+            break;
           }
           case CoffeeModeStep::Drink:
           {
-            if(stepChanged || forceRefresh)
-            {
-              lcd.clear();
-              lcd.print(F("All done!"));
-              lcd.setCursor(0, 1);
-              lcd.print(F("Enjoy"));
-              updated = true;
-            }          
+            Serial.println(F("Drink"));
+            
+            lcd.clear();
+            lcd.print(F("All done!"));
+            lcd.setCursor(0, 1);
+            lcd.print(F("Enjoy"));
+            _delay_ms(5000);
+            scalesMode = ScalesMode::Normal;
+            showingMenu = false;
+            readSamples = true;
+            forceRefresh = true;
+
+            break;
           }
         }
 
@@ -450,24 +467,31 @@ bool DesiredWeightReached()
   }
 }
 
-void PauseWithCountdown(unsigned long pauseMillis)
+void PauseWithCountdown(
+  String title,
+  unsigned long pauseMillis)
 {
   lcd.clear();
+  lcd.print(title);
+  lcd.setCursor(0, 1);
   lcd.print("Please wait...");
+  _delay_ms(2000);
   unsigned long start = millis();
   unsigned long elapsed = millis() - start;
-  while(elapsed > pauseMillis)
+  while(elapsed < (pauseMillis - 2000))
   {
     lcd.setCursor(0, 1);
-    unsigned long remaining = bsdRound((pauseMillis - elapsed) / 1000);
-    String remainingString = String(remaining);
-    remainingString += "s";
+    elapsed = millis() - start;
+    unsigned long remaining = bsdRound(((pauseMillis - 2000) - elapsed) / 1000);
+    String remainingString = String(remaining >= 0 ? remaining : 0);
+    remainingString += F("s");
     while(remainingString.length() < 15)
     {
       remainingString += F(" ");
     }
-    lcd.print(remainingString);
+    lcd.print(remainingString.c_str());
     _delay_ms(1000);
+    RegisterActivity();
   }
 }
 
@@ -520,7 +544,7 @@ bool displayUnroundedSample(
       sampleString += F(" ");
     }
     if(addNextGlyph) sampleString[14] = (char)62;
-    lcd.print(sampleString);
+    lcd.print(sampleString.c_str());
     lastUnrounded = lastAverageSample;
     updated = true;
   }
@@ -549,7 +573,7 @@ bool displayRoundedSample(
       sampleString += F(" ");
     }
     if(addNextGlyph) sampleString[14] = (char)62;
-    lcd.print(sampleString);
+    lcd.print(sampleString.c_str());
     lastRounded = curRounded;
     updated = true;
   }
@@ -602,6 +626,7 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
         else if(curScreen == &mainMenu_modeMenu_Coffee)
         {
           scalesMode = ScalesMode::Coffee;
+          curCoffeeModeStepRequiresNextClick = true;
           showingMenu = false;
           readSamples = true;
           forceRefresh = true;
@@ -652,7 +677,10 @@ void ManagedButtonCallback(String key, ButtonState buttonState)
       {
         if(scalesMode == ScalesMode::Coffee)
         {
-          InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
+          if(curCoffeeModeStepRequiresNextClick)
+          {
+            InitCoffeeModeStep((CoffeeModeStep)((int)coffeeModeStep + 1));
+          }
           forceRefresh = true;
         }
       }
@@ -667,27 +695,32 @@ void InitCoffeeModeStep(CoffeeModeStep desiredCoffeeModeStep)
     return;  
   }
 
+  lcd.clear();
+  curCoffeeModeStepRequiresNextClick = false;
   coffeeModeStep = desiredCoffeeModeStep;
   switch(coffeeModeStep)
   {
     case CoffeeModeStep::PlaceEmptyCarafe:
     {
+      curCoffeeModeStepRequiresNextClick = true;
       curCoffeeModeStepSampleOffset = 0;
       break;
     }
     case CoffeeModeStep::PlaceFilterPaper:
     {
+      curCoffeeModeStepRequiresNextClick = true;
       curCoffeeModeStepSampleOffset = lastAverageSample;                                      //Ack weight of carafe from previous step
       break;
     }
     case CoffeeModeStep::WetFilterPaper:
     {
+      curCoffeeModeStepRequiresNextClick = true;
       curCoffeeModeStepSampleOffset += (lastAverageSample - curCoffeeModeStepSampleOffset);   //Ack weight of dry filter paper from previous step
       break;
     }
     case CoffeeModeStep::EmptyCarafe:
     {
-      //Do nothing in this step
+      curCoffeeModeStepRequiresNextClick = true;
       break;
     }
     case CoffeeModeStep::AddGrounds:
